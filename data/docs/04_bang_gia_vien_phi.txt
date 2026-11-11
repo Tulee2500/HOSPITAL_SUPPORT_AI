@@ -1,0 +1,88 @@
+NGUON: Bảng giá dịch vụ & Chi phí khám - Bệnh Viện Đa Khoa ATus
+
+==============================================================
+BẢNG GIÁ KHÁM DỊCH VỤ (Áp dụng từ 01/01/2025)
+==============================================================
+
+Lưu ý: Giá dưới đây là giá dịch vụ không dùng BHYT. Bệnh nhân có thẻ BHYT hợp lệ được khấu trừ theo tỷ lệ BHYT chi trả. Giá có thể thay đổi theo quy định của Bộ Y Tế, vui lòng xác nhận tại quầy thu ngân.
+
+--- Phí khám bệnh (tiền khám – chưa gồm xét nghiệm, thuốc) ---
+  Khám nội tổng quát (Tầng 3, P.301):                   150.000 đồng
+  Khám ngoại tổng quát (Tầng 3, P.301):                 160.000 đồng
+  Khám chuyên khoa Mắt (Tầng 3, P.302):                 180.000 đồng
+  Khám chuyên khoa Tai Mũi Họng (Tầng 3, P.303):        180.000 đồng
+  Khám chuyên khoa Răng Hàm Mặt (Tầng 3, P.304):       200.000 đồng
+  Khám chuyên khoa Da Liễu (Tầng 3, P.305):             180.000 đồng
+  Khám Sản Phụ Khoa (Tầng 4):                           200.000 đồng
+  Khám Nhi Khoa (Tầng 4):                               170.000 đồng
+  Khám Tim Mạch (Tầng 3, P.301B):                       220.000 đồng
+  Khám Thần Kinh (Tầng 3, P.301E):                      220.000 đồng
+  Khám Cơ Xương Khớp (Tầng 3, P.301A):                  200.000 đồng
+
+--- Phí xét nghiệm thông thường (Tầng 2 – Cánh phải) ---
+  Công thức máu toàn phần (CBC):                         80.000 đồng
+  Sinh hóa máu cơ bản (đường huyết, men gan, thận):     150.000 đồng
+  Tổng phân tích nước tiểu:                              60.000 đồng
+  Xét nghiệm viêm gan B (HBsAg):                       120.000 đồng
+  Xét nghiệm HIV sàng lọc:                             100.000 đồng
+  Siêu âm bụng tổng quát:                              200.000 đồng
+  Siêu âm thai (3D/4D):                                 350.000 đồng
+
+--- Phí chẩn đoán hình ảnh (Tầng 2 – Cánh trái) ---
+  Chụp X-quang ngực thẳng:                             120.000 đồng
+  Chụp CT đầu không thuốc cản quang:                   800.000 đồng
+  Chụp CT ngực, bụng:                                1.200.000 đồng
+  Chụp MRI não:                                      2.500.000 đồng
+  Chụp MRI cột sống:                                 2.800.000 đồng
+
+--- Phí phẫu thuật (Tầng 5 – không gồm viện phí nội trú) ---
+  Phẫu thuật nhỏ (ngoại trú, gây tê tại chỗ):     1.000.000 – 3.000.000 đồng
+  Phẫu thuật trung bình (gây mê):                  5.000.000 – 15.000.000 đồng
+  Phẫu thuật lớn / nội soi:                       15.000.000 – 50.000.000 đồng
+
+--- Phí giường nội trú (mỗi ngày) ---
+  Phòng chung (4–6 giường):                          200.000 đồng/ngày
+  Phòng bán phần (2 giường):                         500.000 đồng/ngày
+  Phòng VIP (Tầng 5, 1 giường):                    1.500.000 đồng/ngày
+  Phòng VIP đặc biệt (có sofa cho người thân):      2.500.000 đồng/ngày
+
+==============================================================
+HÌNH THỨC THANH TOÁN
+==============================================================
+
+Chấp nhận các hình thức thanh toán sau tại quầy thu ngân Tầng 1:
+  - Tiền mặt (VNĐ)
+  - Chuyển khoản ngân hàng (QR Code VietQR)
+  - Thẻ ATM nội địa (Napas)
+  - Thẻ quốc tế: Visa, MasterCard, JCB
+  - Ví điện tử: MoMo, ZaloPay, VNPay
+  - Bảo hiểm y tế nhà nước (BHYT)
+  - Bảo hiểm sức khỏe tư nhân: liên hệ bộ phận BHYT tầng 1 để hỗ trợ
+
+Tạm ứng viện phí:
+  - Bệnh nhân nội trú phải tạm ứng viện phí trước khi vào phòng bệnh.
+  - Mức tạm ứng tối thiểu: 2.000.000đ (bệnh thường), 5.000.000đ (phẫu thuật / ICU).
+  - Thanh toán chính thức (quyết toán) vào ngày xuất viện.
+  - Trường hợp cấp cứu khẩn cấp: có thể tạm ứng sau khi bệnh nhân ổn định.
+
+Hoàn trả viện phí:
+  - Trường hợp tạm ứng dư: hoàn trả tiền mặt hoặc chuyển khoản trong vòng 2 giờ sau khi quyết toán.
+  - Khiếu nại hóa đơn: liên hệ quầy thu ngân hoặc gọi 024.7777.9999 (phím 3) trong vòng 30 ngày.
+
+==============================================================
+GÓI KHÁM SỨC KHỎE ĐỊNH KỲ
+==============================================================
+
+Gói Cơ Bản (ATus Basic):
+  Gồm: khám nội tổng quát, XN máu cơ bản, XN nước tiểu, đo huyết áp, cân đo BMI.
+  Giá: 500.000 đồng/người.
+
+Gói Tiêu Chuẩn (ATus Standard):
+  Gồm: Gói Cơ Bản + siêu âm bụng + X-quang ngực + điện tâm đồ ECG + khám mắt cơ bản.
+  Giá: 1.200.000 đồng/người.
+
+Gói Nâng Cao (ATus Premium):
+  Gồm: Gói Tiêu Chuẩn + xét nghiệm ung thư marker (CEA, AFP, PSA/CA125) + nội soi dạ dày (nếu chỉ định).
+  Giá: 3.500.000 đồng/người.
+
+Gói Sức Khỏe Doanh Nghiệp: liên hệ phòng Hành chính – Nhân sự (024.7777.9999 phím 5) để được báo giá theo số lượng nhân viên.

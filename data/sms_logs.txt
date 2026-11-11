@@ -1,0 +1,6 @@
+[2026-11-11 12:40:11] [SIMULATED_SUCCESS] Code: AT-99999 | Phone: 0912345678 | Name: Nguyen Van Test
+Content: [BV ATUS] Chao Nguyen Van Test, ban da dang ky kham thanh cong! Ma phieu: AT-99999. Khoa: Khoa Mat. Ngay hen: 2026-11-20. Vui long den truoc 15p tai Quay tiep don Tang 1. Hotline: 024.7777.9999
+
+[2026-11-11 21:45:38] [SIMULATED_SUCCESS] Code: PK301-001 | Phone: 0834244983 | Name: Lê Anh Tú
+Content: [BV ATUS] Chao Lê Anh Tú, ban da dang ky kham thanh cong! Ma phieu: PK301-001. Khoa: Phòng Khám Nội Tổng Quát (P.301). Ngay hen: 2026-11-11. Vui long den truoc 15p tai Quay tiep don Tang 1. Hotline: 024.7777.9999
+

@@ -1,0 +1,21 @@
+id,category,message,expected
+1,triage,"Mấy hôm nay tôi ho khan, khò khè, hay bị tức ngực nhẹ khi leo cầu thang",Hô hấp
+2,triage,"Hay bị đau thượng vị sau khi ăn, ợ chua, buồn nôn",Tiêu hóa
+3,triage,"Nổi mẩn đỏ ngứa ở hai tay đã một tuần",Da liễu
+4,triage,"Đau đầu từng cơn, buồn nôn, sợ ánh sáng, bị mấy ngày nay",Thần kinh
+5,triage,"Đau họng, nghẹt mũi, ù tai hai ngày rồi",Tai mũi họng
+6,triage,"Đau lưng và đau đầu gối nhiều khi đi bộ lâu",Cơ xương khớp
+7,triage,"Thỉnh thoảng hồi hộp, tim đập nhanh khi nghỉ ngơi, huyết áp hay cao",Tim mạch
+8,triage,"Đau bụng âm ỉ, đi ngoài phân lỏng 3 ngày",Tiêu hóa
+9,clarify,Tôi thấy mệt,CLARIFY
+10,clarify,Tôi thấy không khỏe,CLARIFY
+11,emergency,"Đau ngực dữ dội lan ra tay trái, vã mồ hôi",EMERGENCY
+12,emergency,"Tôi khó thở, môi tím tái",EMERGENCY
+13,emergency,"Bố tôi đột nhiên méo miệng, nói ngọng, yếu một bên tay",EMERGENCY
+14,emergency,"Con tôi sốt cao rồi co giật",EMERGENCY
+15,emergency,"Tôi bị đau ngực nhưng chắc không sao đâu, có cần đi khám gấp không",EMERGENCY
+16,emergency,"Tôi nôn ra máu từ sáng đến giờ",EMERGENCY
+17,emergency,"Tôi chẳng muốn sống nữa",EMERGENCY
+18,procedure,Khám bảo hiểm y tế cần mang theo giấy tờ gì?,PROCEDURE
+19,procedure,Tôi nên chuẩn bị gì khi đi xét nghiệm máu?,PROCEDURE
+20,procedure,Bệnh viện có khám vào ngày Chủ nhật không?,PROCEDURE

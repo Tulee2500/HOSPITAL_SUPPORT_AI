@@ -1,0 +1,60 @@
+NGUON: Hướng dẫn Bảo Hiểm Y Tế (BHYT) - Bệnh Viện Đa Khoa ATus
+
+==============================================================
+BẢO HIỂM Y TẾ (BHYT) – NHỮNG ĐIỀU CẦN BIẾT
+==============================================================
+
+--- BHYT là gì? ---
+Bảo hiểm y tế (BHYT) là chính sách của Nhà nước giúp người dân chia sẻ chi phí khám chữa bệnh. Người có thẻ BHYT được Quỹ BHYT thanh toán một phần hoặc toàn bộ chi phí khám, chữa bệnh theo quy định.
+
+--- Mức hưởng BHYT tại bệnh viện ATus ---
+Bệnh viện ATus là cơ sở y tế hạng I – tuyến trung ương, do đó:
+
+Khám đúng tuyến (có giấy chuyển viện hợp lệ từ tuyến dưới):
+  - Thuốc, vật tư y tế trong danh mục BHYT: hưởng 80–100% tùy đối tượng.
+  - Người thuộc diện hộ nghèo, cận nghèo, trẻ em dưới 6 tuổi, người có công: hưởng 100%.
+  - Người lao động bình thường: hưởng 80%.
+
+Khám trái tuyến (không có giấy chuyển viện):
+  - Nội trú (nằm viện): hưởng 40% chi phí BHYT thanh toán.
+  - Ngoại trú (khám không nhập viện): hưởng 0% (tự thanh toán toàn bộ).
+  - Lưu ý: từ năm 2025, bệnh nhân khám ngoại trú trái tuyến không được Quỹ BHYT hỗ trợ.
+
+Trường hợp cấp cứu:
+  - Bệnh nhân cấp cứu được hưởng BHYT đầy đủ theo đúng tuyến, bất kể đăng ký khám ban đầu ở đâu.
+
+--- Giấy chuyển viện ---
+- Giấy chuyển viện do cơ sở y tế tuyến dưới (trạm y tế xã, bệnh viện huyện, bệnh viện tỉnh) cấp.
+- Giấy chuyển viện có giá trị trong vòng 10 ngày làm việc kể từ ngày ký.
+- Trường hợp điều trị nội trú: giấy chuyển viện có giá trị cho cả đợt điều trị.
+- Không cần giấy chuyển viện khi: cấp cứu, khám mắt, răng hàm mặt, tai mũi họng, da liễu, ung bướu, tim mạch, tâm thần (theo quy định 2024).
+
+--- Thủ tục thanh toán BHYT tại ATus ---
+Bước 1: Nộp thẻ BHYT (hoặc hiển thị VNeID) và CCCD tại quầy đăng ký.
+Bước 2: Nhận phiếu khám; hệ thống tự xác minh thẻ BHYT trực tuyến với Bảo hiểm Xã hội Việt Nam.
+Bước 3: Khám, làm xét nghiệm, nhận thuốc theo chỉ định.
+Bước 4: Thanh toán phần chênh lệch (nếu có) tại quầy thu ngân. Nhân viên sẽ in bảng chi tiết chi phí BHYT đã thanh toán và phần bệnh nhân phải trả.
+
+--- Thuốc và vật tư BHYT ---
+- BHYT chỉ thanh toán thuốc, vật tư nằm trong danh mục ban hành kèm Thông tư 20/2022/TT-BYT và các thông tư sửa đổi.
+- Thuốc ngoài danh mục hoặc biệt dược cao cấp: bệnh nhân tự chi trả.
+- Bác sĩ sẽ thông báo trước nếu có thuốc/vật tư ngoài BHYT cần dùng.
+
+==============================================================
+CÁC CÂU HỎI THƯỜNG GẶP VỀ BHYT
+==============================================================
+
+Hỏi: Thẻ BHYT hết hạn có dùng được không?
+Đáp: Không. Thẻ phải còn hạn vào ngày khám. Liên hệ cơ quan BHXH hoặc nơi làm việc để gia hạn trước khi đến khám.
+
+Hỏi: Mất thẻ BHYT có khám được không?
+Đáp: Có. Bệnh nhân có thể dùng ứng dụng VNeID (đã tích hợp BHYT điện tử) thay thẻ cứng. Hoặc yêu cầu tra cứu số BHYT qua CCCD tại quầy đăng ký.
+
+Hỏi: Khám nhiều chuyên khoa trong cùng một ngày có được tính là một lần không?
+Đáp: Nếu khám trong cùng một ngày tại ATus theo chỉ định của bác sĩ điều trị, chỉ tính phí khám một lần.
+
+Hỏi: Người nước ngoài có dùng BHYT tại ATus không?
+Đáp: Người nước ngoài làm việc tại Việt Nam và tham gia BHYT bắt buộc được hưởng quyền lợi BHYT như người Việt Nam. Bệnh nhân quốc tế không có BHYT khám theo giá dịch vụ.
+
+Hỏi: Có được tạm ứng viện phí không?
+Đáp: Có. Bệnh nhân nhập viện điều trị nội trú cần tạm ứng viện phí tại quầy thu ngân. Mức tạm ứng tối thiểu: 2.000.000 đồng (bệnh thường) và 5.000.000 đồng (phẫu thuật, ICU). Thanh toán chính thức khi xuất viện.

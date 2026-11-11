@@ -1,0 +1,8 @@
+﻿timestamp,user_query,intent,department,is_emergency
+2026-11-11 12:40:11,dau mat do kem chay nuoc mat,symptom,Mat,false
+2026-11-11 12:40:11,gio lam viec khoa xet nghiem,procedure,,false
+2026-11-11 12:40:11,tuc nguc du doi kho tho,emergency,Cap cuu,true
+2026-11-11 21:45:27,Tôi bị đau bụng,symptom,Tiêu hóa,false
+2026-11-11 23:40:07,Ngu,other,,false
+2026-11-11 23:48:58,tôi muốn khám nội tổng quát,procedure,,false
+2026-11-11 23:50:52,tôi muốn khám nội tổng quát,procedure,,false

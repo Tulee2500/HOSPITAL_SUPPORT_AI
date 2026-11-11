@@ -1,0 +1,54 @@
+NGUON: Nội quy & Thủ tục khám chữa bệnh - Bệnh Viện Đa Khoa ATus
+
+==============================================================
+GIẤY TỜ CẦN MANG KHI ĐI KHÁM BỆNH
+==============================================================
+
+--- Khám dịch vụ (không dùng BHYT) ---
+- Căn cước công dân (CCCD) hoặc chứng minh nhân dân còn hạn.
+- Sổ khám bệnh / hồ sơ bệnh án cũ (nếu có) để bác sĩ tham khảo quá trình điều trị trước.
+- Kết quả xét nghiệm, phim X-quang, MRI, CT cũ nếu có.
+- Với trẻ em dưới 15 tuổi: cần có giấy khai sinh hoặc CCCD của trẻ; người giám hộ mang theo CCCD của mình.
+
+--- Khám bảo hiểm y tế (BHYT) ---
+- Thẻ bảo hiểm y tế còn hiệu lực HOẶC ứng dụng VNeID có tích hợp thẻ BHYT điện tử.
+- Căn cước công dân hoặc giấy tờ tùy thân có ảnh.
+- Giấy chuyển viện (nếu đến từ tuyến dưới hoặc khám trái tuyến).
+- Sổ thai / giấy siêu âm (đối với thai phụ khám sản).
+- Trẻ em dưới 6 tuổi: thẻ BHYT trẻ em miễn phí – không cần giấy chuyển tuyến.
+
+--- Khám cấp cứu ---
+- Không cần giấy tờ trong tình huống khẩn cấp. Nhân viên y tế sẽ hỗ trợ hoàn tất thủ tục sau khi ổn định tình trạng bệnh nhân.
+- Người thân hoặc người đi cùng cần cung cấp CCCD của bệnh nhân sớm nhất có thể để lập hồ sơ điều trị.
+
+==============================================================
+CÁC BƯỚC KHÁM BỆNH CƠ BẢN (QUY TRÌNH CHUẨN)
+==============================================================
+
+Bước 1 – Đăng ký khám:
+  Đến quầy tiếp đón tầng 1 hoặc sử dụng kiosk tự đăng ký. Cung cấp CCCD và thẻ BHYT (nếu có). Có thể đặt lịch trước qua tổng đài 024.7777.9999 hoặc chatbot AI trên website để rút ngắn thời gian chờ.
+
+Bước 2 – Nhận số thứ tự và đến phòng khám:
+  Màn hình điện tử tại mỗi tầng và mỗi phòng khám hiển thị số thứ tự đang gọi. Bệnh nhân chờ tại ghế chờ trước phòng khám được chỉ định.
+
+Bước 3 – Khám lâm sàng với bác sĩ:
+  Bác sĩ hỏi bệnh sử, khám tổng quát và ra chỉ định cận lâm sàng (xét nghiệm máu, nước tiểu, siêu âm, X-quang, CT, MRI...) nếu cần thiết.
+
+Bước 4 – Thực hiện các chỉ định cận lâm sàng (nếu có):
+  Bệnh nhân đến các phòng xét nghiệm hoặc chẩn đoán hình ảnh ở Tầng 2 theo phiếu chỉ định của bác sĩ. Thời gian trả kết quả xét nghiệm máu thông thường: 1–2 giờ; kết quả nhanh: 30–60 phút.
+
+Bước 5 – Nhận kết quả và tái khám bác sĩ:
+  Bệnh nhân quay lại phòng khám ban đầu với kết quả để bác sĩ đọc, kết luận và viết đơn thuốc hoặc hướng dẫn điều trị.
+
+Bước 6 – Thanh toán và nhận thuốc:
+  Thanh toán tại quầy thu ngân tầng 1. Nhận thuốc tại nhà thuốc bệnh viện (cũng ở Tầng 1). Chấp nhận tiền mặt, chuyển khoản, thẻ ngân hàng (ATM/Visa/MasterCard), và thanh toán qua app BHYT.
+
+==============================================================
+LƯU Ý QUAN TRỌNG KHI ĐI KHÁM
+==============================================================
+
+- Đến sớm hơn giờ hẹn ít nhất 15–20 phút để hoàn tất thủ tục đăng ký.
+- Mặc quần áo thoải mái, dễ cởi để thuận tiện cho bác sĩ khám lâm sàng.
+- Nhịn ăn từ 8–12 tiếng trước khi lấy máu xét nghiệm (chỉ được uống nước lọc). Hỏi nhân viên y tế xem xét nghiệm của bạn có yêu cầu nhịn ăn không.
+- Thông báo cho bác sĩ về các loại thuốc đang dùng, dị ứng thuốc, và bệnh nền để tránh chống chỉ định.
+- Trẻ em cần có người giám hộ hợp pháp đi kèm.
