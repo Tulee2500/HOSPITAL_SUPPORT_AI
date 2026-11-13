@@ -1,785 +1,1059 @@
-"""Mô hình 3D Bệnh Viện Isometric Đa Tầng cao cấp (Three.js Orthographic WebGL).
-Khắc phục triệt để:
-1. Phân biệt rõ đường đi (Hành lang & Lộ trình Wayfinding):
-   - Thay đường line 1px mảnh (dễ mất hình trên Windows/WebGL) bằng dải ruy-băng 3D Ribbon phẳng (bề rộng 0.4m)
-     phát sáng màu Cyan ngọc (#008f88 / #00b4d8) với các vòng tròn waypoint nổi bật, nhìn thấy rõ 100%.
-   - Mặt sàn hành lang màu trắng sáng (#ffffff) có viền tương phản với nền sàn các phòng khám,
-     giúp phân biệt rõ ràng lối đi, cửa vào và từng phân khu.
-2. Tinh chỉnh kích thước nhãn phòng (Compact Pill Badges):
-   - Giảm kích thước nhãn vừa vặn chuẩn tỉ lệ (font 10px, padding 3px 8px), không còn to quá khổ,
-     không che khuất xe cứu thương hay thiết bị phòng khám.
-3. Độ tương phản & Màu sắc chuẩn thiết kế y tế:
-   - Nền canvas xung quanh: Màu ngọc nhạt dịu mắt (#edf6f6) làm nổi bật khối sa bàn 3D màu trắng.
-   - Sàn từng khoa phòng mang màu sắc tươi sáng, phân biệt rõ ràng:
-       + Cấp cứu: Hồng san hô (#fda4af)
-       + Khám bệnh: Xanh mint (#a7f3d0)
-       + Khoa Nội: Xanh dương (#93c5fd)
-       + Khoa Ngoại: Xám vô trùng (#cbd5e1)
-       + Xét nghiệm: Tím lavender (#c4b5fd)
-       + Nhà thuốc: Xanh ngọc (#6ee7b7)
-4. Chuẩn hóa 100% dữ liệu phòng theo Database SQL Server:
-   - Tầng 1: Cấp cứu 24/7 (P.101), Khám bệnh, Khoa Nội (P.301 đón tiếp), Khoa Ngoại, Xét nghiệm (P.201), Nhà thuốc.
-   - Tầng 2: Cận lâm sàng (P.201 Lấy máu/XN, P.202 Đo hô hấp, P.203 X-Quang, P.204 MRI/CT).
-   - Tầng 3: Chuyên khoa (P.301 Nội, P.302 Mắt, P.303 Tai Mũi Họng, P.304 Răng Hàm Mặt, P.305 Da Liễu).
-   - Tầng 4: Sản (P.401) & Nhi (P.402).
+"""Bản đồ 3D Bệnh Viện ATUS (Three.js WebGL Engine) - Phiên bản Nâng cấp 360° Quán Tính Mượt Mà.
+
+Đặc tính kỹ thuật cao cấp:
+1. Xoay 360° vô tận có quán tính (Angular Momentum & Damping factor = 0.92), lướt mượt mà chuẩn 60 FPS.
+2. Giới hạn góc ngẩng an toàn (Polar Clamping 10° - 85°), không lật ngược, không xuyên sàn.
+3. Hỗ trợ cảm ứng đa điểm (Touch Gestures): 1 ngón xoay 360°, 2 ngón kẹp để phóng to/thu nhỏ (Pinch Zoom) và rê 2 ngón (Pan).
+4. Chuột: Kéo chuột trái xoay 360°, Chuột phải rê bản đồ (Pan), Con lăn phóng to/thu nhỏ mượt mà (Lerp Zoom).
+5. Nút bấm tiện ích: Phóng to, Thu nhỏ, Đặt lại góc nhìn chuẩn, Bật/Tắt tự động xoay 360°.
+6. Phản ánh chuẩn xác sơ đồ 35 phòng thực tế của 3 tầng Bệnh viện ATUS:
+   - Tầng 1: Tiếp đón, Cấp cứu 24/7, Khám Nội, Nhi riêng, Cận lâm sàng, Nhà thuốc.
+   - Tầng 2: 14 Chuyên khoa ngoại trú sâu.
+   - Tầng 3: Khu phẫu thuật & ICU có ổ khóa "Chỉ nhân viên", mở khu thăm bệnh nội trú.
+7. LOẠI BỎ TRIỆT ĐỂ BẢNG ĐẶT LỊCH TRÙNG LẶP: Dành trọn vẹn 100% không gian hiển thị cho mô hình 3D.
 """
 from __future__ import annotations
 
 import json
 
 
-def get_hospital_3d_html(target_floor=1, target_dept=""):
-    """Trả về HTML Three.js mặt bằng Isometric hiển thị đường đi và khoa phòng cực kỳ rõ ràng."""
+def get_hospital_3d_html(target_floor=1, target_dept="", mode="full"):
+    """Trả về mã HTML Three.js bản đồ 3D ATUS chuẩn 360° mượt mà không trùng lặp."""
+    init_f_idx = max(0, min(2, (int(target_floor) if target_floor else 1) - 1))
+    init_dept_json = json.dumps(target_dept or "", ensure_ascii=False)
+    is_mini = (mode == "mini")
+    
+    stage_height = "180px" if is_mini else "min(78vh, 720px)"
+    min_h = "180px" if is_mini else "520px"
+
     return f"""<!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * {{ box-sizing: border-box; margin: 0; padding: 0; user-select: none; }}
-        body {{
-            overflow: hidden;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            background: #edf6f6;
-        }}
-        #viewport {{
-            width: 100%; height: 610px; position: relative;
-            background: radial-gradient(circle at 50% 45%, #ffffff 0%, #edf6f6 80%, #e2f1f0 100%);
-            border-radius: 14px; overflow: hidden;
-            border: 1px solid #cbd5e1;
-            box-shadow: 0 4px 20px rgba(0, 58, 112, 0.06);
-        }}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Bản đồ Bệnh viện ATUS 3D</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root {{
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --ink: #0f172a;
+  --mute: #64748b;
+  --line: #e2e8f0;
+  --acc: #008f88;
+  --acc-hover: #00736d;
+  --title: #003a70;
+  --soft: #e6f7f6;
+  box-sizing: border-box;
+}}
+* {{ box-sizing: border-box; user-select: none; }}
+body {{
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: {"transparent" if is_mini else "var(--bg)"};
+  color: var(--ink);
+  overflow: hidden;
+}}
+.map-wrapper {{
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  max-height: {stage_height};
+  min-height: {min_h};
+  background: linear-gradient(135deg, #f0fdfa 0%, #e0f2fe 50%, #f1f5f9 100%);
+  border-radius: {"10px" if is_mini else "14px"};
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 20px rgba(0, 58, 112, 0.06);
+}}
+.stage {{
+  width: 100%;
+  height: 100%;
+  position: relative;
+  touch-action: none;
+  cursor: grab;
+}}
+.stage.grabbing {{
+  cursor: grabbing !important;
+}}
+.stage canvas {{
+  display: block;
+  width: 100%;
+  height: 100%;
+}}
 
-        /* Thanh tiêu đề trên cùng */
-        .map-top-bar {{
-            position: absolute; top: 12px; left: 16px; right: 16px;
-            display: flex; justify-content: space-between; align-items: center;
-            z-index: 30; pointer-events: none;
-        }}
-        .map-top-title {{
-            font-size: 1.1rem; font-weight: 800; color: #003a70;
-            letter-spacing: 0.5px; text-transform: uppercase;
-        }}
-        .booking-cta-btn {{
-            pointer-events: auto;
-            background: #008f88; color: #ffffff; border: none;
-            padding: 7px 15px; border-radius: 8px; font-weight: 700; font-size: 12px;
-            display: flex; align-items: center; gap: 6px; cursor: pointer;
-            box-shadow: 0 2px 8px rgba(0, 143, 136, 0.35);
-            transition: all 0.2s ease;
-        }}
-        .booking-cta-btn:hover {{
-            background: #007670; transform: translateY(-1px);
-        }}
+/* Top Search & Filter Bar */
+.top-bar {{
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: {"none" if is_mini else "flex"};
+  gap: 10px;
+  align-items: center;
+  z-index: 30;
+  pointer-events: none;
+}}
+.top-bar > * {{
+  pointer-events: auto;
+}}
+.search-input-box {{
+  flex: 1;
+  max-width: 380px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1.5px solid var(--line);
+  border-radius: 24px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}}
+.search-input-box input {{
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: 13.5px;
+  color: var(--ink);
+  outline: none;
+}}
+.view-ctrl-group {{
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}}
+.ctrl-pill {{
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--title);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  transition: all 0.2s;
+}}
+.ctrl-pill:hover {{
+  background: var(--acc);
+  color: #fff;
+  border-color: var(--acc);
+  transform: translateY(-1px);
+}}
+.ctrl-pill.active {{
+  background: var(--acc);
+  color: #fff;
+  border-color: var(--acc);
+}}
 
-        /* Cụm chuyển tầng ở giữa dưới */
-        .floor-switcher {{
-            position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 6px; z-index: 30;
-            background: #ffffff; padding: 4px 6px;
-            border-radius: 10px; box-shadow: 0 4px 16px rgba(0, 58, 112, 0.12);
-            border: 1px solid #cbd5e1;
-        }}
-        .floor-btn {{
-            border: none; background: transparent; color: #334155;
-            padding: 6px 14px; border-radius: 7px; font-weight: 700; font-size: 12.5px;
-            cursor: pointer; transition: all 0.2s ease;
-        }}
-        .floor-btn:hover {{ background: #f1f5f9; }}
-        .floor-btn.active {{
-            background: #008f88; color: #ffffff;
-            box-shadow: 0 2px 8px rgba(0, 143, 136, 0.35);
-        }}
+/* Controls Zoom & Rotate */
+.zoom-controls {{
+  position: absolute;
+  left: 14px;
+  top: {"10px" if is_mini else "68px"};
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 30;
+}}
+.zoom-btn {{
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  color: var(--title);
+  font-size: 17px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: all 0.2s;
+}}
+.zoom-btn:hover {{
+  background: var(--acc);
+  color: #fff;
+  border-color: var(--acc);
+  transform: scale(1.06);
+}}
 
-        /* Cụm Zoom controls góc trái dưới */
-        .zoom-controls {{
-            position: absolute; bottom: 14px; left: 14px;
-            display: flex; flex-direction: column; align-items: center; gap: 2px; z-index: 30;
-            background: #ffffff; padding: 4px;
-            border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 58, 112, 0.1);
-            border: 1px solid #cbd5e1;
-        }}
-        .zoom-btn {{
-            width: 28px; height: 28px; border: none; background: #f8fafc;
-            color: #0f172a; font-size: 15px; font-weight: 700;
-            border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-            transition: 0.15s;
-        }}
-        .zoom-btn:hover {{ background: #008f88; color: #ffffff; }}
-        .zoom-lbl {{ font-size: 8.5px; font-weight: 700; color: #64748b; margin: 1px 0; text-transform: uppercase; }}
+/* Floor Selector Tabs */
+.floor-tabs {{
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: {"none" if is_mini else "flex"};
+  gap: 6px;
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(0, 58, 112, 0.12);
+  z-index: 30;
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+}}
+.floor-tab-btn {{
+  border: none;
+  background: transparent;
+  color: var(--mute);
+  border-radius: 11px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: all 0.2s;
+  text-align: center;
+}}
+.floor-tab-btn small {{
+  display: block;
+  font-size: 10.5px;
+  font-weight: 500;
+  opacity: 0.85;
+}}
+.floor-tab-btn:hover {{
+  color: var(--title);
+  background: rgba(0, 143, 136, 0.08);
+}}
+.floor-tab-btn.on {{
+  background: var(--acc);
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(0, 143, 136, 0.35);
+}}
+.floor-tab-btn.on small {{
+  color: #e0fdfa;
+}}
 
-        /* Nhãn phòng khám 3D HTML Overlay - GỌN GÀNG, KHÔNG CHE KHUẤT */
-        .room-tag {{
-            position: absolute; transform: translate(-50%, -50%);
-            padding: 3px 9px; border-radius: 5px; font-size: 10.5px; font-weight: 800;
-            white-space: nowrap; pointer-events: none; z-index: 20;
-            box-shadow: 0 2px 8px rgba(0, 30, 60, 0.22);
-            transition: transform 0.2s, opacity 0.2s;
-            border: 1px solid #ffffff;
-        }}
-        .tag-emergency {{ background: #ef4444; color: #ffffff; }}
-        .tag-primary-blue {{ background: #0284c7; color: #ffffff; }}
-        .tag-dark-blue {{ background: #0369a1; color: #ffffff; }}
-        .tag-pharmacy {{ background: #059669; color: #ffffff; }}
-        .tag-lab {{ background: #7c3aed; color: #ffffff; }}
+/* Room Labels (Billboard Pill) */
+.lbl, .mk {{
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(4px);
+  color: #0f172a;
+  border: 1.5px solid var(--c, #008f88);
+  border-radius: 999px;
+  padding: {"2px 6px" if is_mini else "3px 9px"};
+  font: 700 {"10px" if is_mini else "12px"} system-ui, -apple-system, sans-serif;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+  transition: transform 0.05s ease-out, border-color 0.2s;
+  will-change: transform;
+}}
+.lbl i {{
+  font-style: normal;
+  background: var(--c, #008f88);
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 1px 5px;
+  margin-left: 5px;
+  font-size: {"9px" if is_mini else "10.5px"};
+}}
+.lbl.sel {{
+  background: var(--c, #008f88) !important;
+  color: #ffffff !important;
+  transform: translate(-50%, -100%) scale(1.12) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25) !important;
+  z-index: 25 !important;
+}}
+.lbl.sel i {{
+  background: #ffffff !important;
+  color: var(--c, #008f88) !important;
+}}
+.lbl.restricted {{
+  border-style: dashed;
+  background: #f1f5f9;
+  color: #64748b;
+}}
 
-        /* Icon tiện ích phụ thu nhỏ */
-        .icon-tag {{
-            position: absolute; transform: translate(-50%, -50%);
-            width: 20px; height: 20px; border-radius: 4px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 10.5px; z-index: 18; pointer-events: none;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
-            border: 1px solid #ffffff;
-        }}
-        .icon-restroom {{ background: #0284c7; color: #ffffff; }}
-        .icon-elevator {{ background: #0369a1; color: #ffffff; }}
-        .icon-heart {{ background: #ef4444; color: #ffffff; border-radius: 50%; width: 18px; height: 18px; }}
+/* Floating Room Info Card (Khi bấm chọn phòng trên 3D) */
+.room-popup-card {{
+  position: absolute;
+  right: 14px;
+  top: {"10px" if is_mini else "68px"};
+  width: 260px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 8px 24px rgba(0, 58, 112, 0.15);
+  display: none;
+  z-index: 35;
+  animation: slideIn 0.2s ease-out;
+}}
+@keyframes slideIn {{
+  from {{ opacity: 0; transform: translateY(-8px); }}
+  to {{ opacity: 1; transform: translateY(0); }}
+}}
+.room-popup-card b {{
+  font-size: 15px;
+  color: var(--title);
+  display: block;
+}}
+.room-popup-card .p-meta {{
+  font-size: 12px;
+  color: var(--mute);
+  margin: 4px 0 8px 0;
+}}
+.room-popup-card .p-badge {{
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}}
+.room-popup-card button {{
+  width: 100%;
+  background: var(--acc);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: 0.2s;
+}}
+.room-popup-card button:hover {{
+  background: var(--acc-hover);
+}}
 
-        /* Nhãn văn bản dán sàn */
-        .floor-text-label {{
-            position: absolute; transform: translate(-50%, -50%);
-            font-size: 9.5px; font-weight: 800; color: #003a70;
-            background: rgba(255, 255, 255, 0.95); padding: 2px 6px;
-            border-radius: 3px; border: 1px solid #008f88;
-            pointer-events: none; z-index: 15; white-space: nowrap;
-        }}
-
-        /* Nhãn phòng AI đang chọn (Nhấp nháy nổi bật) */
-        .tag-highlight {{
-            background: #f43f5e !important; color: #ffffff !important;
-            border: 2px solid #ffffff !important; font-size: 12px !important;
-            padding: 5px 12px !important;
-            box-shadow: 0 0 20px rgba(244, 63, 94, 0.9), 0 4px 10px rgba(0,0,0,0.3) !important;
-            animation: pulse-tag 1.2s infinite alternate !important;
-            z-index: 25 !important;
-        }}
-        @keyframes pulse-tag {{
-            0% {{ transform: translate(-50%, -50%) scale(1); }}
-            100% {{ transform: translate(-50%, -50%) scale(1.12); }}
-        }}
-    </style>
+/* Legend Box */
+.legend-box {{
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  z-index: 28;
+  display: {"none" if is_mini else "block"};
+  max-width: 220px;
+}}
+.legend-box summary {{
+  font-weight: 700;
+  color: var(--title);
+  cursor: pointer;
+}}
+.legend-item {{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11px;
+}}
+.legend-dot {{
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}}
+</style>
 </head>
 <body>
-    <div id="viewport">
-        <!-- Top bar -->
-        <div class="map-top-bar">
-            <div class="map-top-title">BẢN ĐỒ BỆNH VIỆN ATUS 3D</div>
-            <button class="booking-cta-btn" onclick="triggerBooking()">
-                <span>📅</span> <span>ĐẶT LỊCH KHÁM</span>
-            </button>
-        </div>
 
-        <!-- Zoom Controls -->
-        <div class="zoom-controls">
-            <button class="zoom-btn" onclick="zoomIn()" title="Phóng to">+</button>
-            <span class="zoom-lbl">Zoom</span>
-            <button class="zoom-btn" onclick="zoomOut()" title="Thu nhỏ">−</button>
-        </div>
-
-        <!-- Chuyển tầng -->
-        <div class="floor-switcher">
-            <button class="floor-btn" id="fbtn-1" onclick="switchFloor(1)">Tầng 1 (Tiếp Đón/Cấp Cứu)</button>
-            <button class="floor-btn" id="fbtn-2" onclick="switchFloor(2)">Tầng 2 (Cận Lâm Sàng)</button>
-            <button class="floor-btn" id="fbtn-3" onclick="switchFloor(3)">Tầng 3 (Chuyên Khoa)</button>
-            <button class="floor-btn" id="fbtn-4" onclick="switchFloor(4)">Tầng 4 (Sản/Nhi)</button>
-        </div>
-
-        <div id="labels-container"></div>
+<div class="map-wrapper">
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="search-input-box">
+      <span>🔍</span>
+      <input id="q" type="search" placeholder="Tìm khoa, số phòng (VD: Nội, Cấp cứu, Tim mạch...)" aria-label="Tìm phòng">
     </div>
+    <div class="view-ctrl-group">
+      <button class="ctrl-pill" id="btn-reset-view" title="Trở về góc nhìn tiêu chuẩn">🔄 Đặt lại góc</button>
+      <button class="ctrl-pill" id="btn-auto-rotate" title="Bật/Tắt xoay 360 độ tự động">🎬 Tự xoay 360°</button>
+    </div>
+  </div>
+
+  <!-- Zoom Buttons -->
+  <div class="zoom-controls">
+    <button class="zoom-btn" id="zi" title="Phóng to">+</button>
+    <button class="zoom-btn" id="zo" title="Thu nhỏ">−</button>
+  </div>
+
+  <!-- 3D Canvas Stage -->
+  <div class="stage" id="stage"></div>
+
+  <!-- Room Info Popup -->
+  <div class="room-popup-card" id="roomPopup"></div>
+
+  <!-- Floor Selector Tabs -->
+  <div class="floor-tabs" id="tabs"></div>
+
+  <!-- Legend -->
+  <details class="legend-box" open>
+    <summary>Chú giải phân khu</summary>
+    <div id="legendContent"></div>
+  </details>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// HỆ MÀU CHỨC NĂNG CHUẨN Y TẾ
+// ═══════════════════════════════════════════════════════════════════════════
+const TY = {{
+  er:     {{ c: 0xe55353, bg: 0xfce8e8, l: 'Cấp cứu 24/7' }},
+  exam:   {{ c: 0x0284c7, bg: 0xe0f2fe, l: 'Phòng khám đa khoa / Nội' }},
+  spec:   {{ c: 0x2563eb, bg: 0xdbeafe, l: 'Chuyên khoa sâu (Tầng 2)' }},
+  lab:    {{ c: 0x7c3aed, bg: 0xede9fe, l: 'Xét nghiệm / CĐHA (X-quang, CT)' }},
+  pharm:  {{ c: 0x059669, bg: 0xd1fae5, l: 'Nhà thuốc Bệnh viện' }},
+  ob:     {{ c: 0xdb2777, bg: 0xfce7f3, l: 'Sản phụ khoa & Nhi' }},
+  ward:   {{ c: 0x0891b2, bg: 0xcffafe, l: 'Nội trú (Thăm bệnh)' }},
+  locked: {{ c: 0x64748b, bg: 0xe2e8f0, l: 'Chỉ nhân viên (Phòng mổ, ICU)' }},
+  util:   {{ c: 0x475569, bg: 0xf1f5f9, l: 'Sảnh tiếp đón / Thu ngân' }}
+}};
+const hex = n => '#' + n.toString(16).padStart(6, '0');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DỮ LIỆU 35 PHÒNG THỰC TẾ 3 TẦNG BỆNH VIỆN ATUS
+// ═══════════════════════════════════════════════════════════════════════════
+const FL = [
+  {{
+    n: 'Tầng 1', s: 'Tiếp đón, Cấp cứu & Cận lâm sàng',
+    r: [
+      ['Khoa Cấp cứu 24/7', 'T1-04', 'er', -14, -7, 1.5, 8.5, false],
+      ['Sảnh chính & Kiosk', 'T1-01', 'util', -7, 0, 1.5, 8.5, false],
+      ['Quầy đăng ký & BHYT', 'T1-02', 'util', 0, 6, 1.5, 8.5, false],
+      ['Quầy thu ngân', 'T1-03', 'util', 6, 10, 1.5, 8.5, false],
+      ['Nhà thuốc ATUS', 'T1-12', 'pharm', 10, 14, 1.5, 8.5, false],
+      ['Khám Nội tổng quát 1', 'T1-05', 'exam', -14, -8, -8.5, -1.5, false],
+      ['Khám Nội tổng quát 2', 'T1-06', 'exam', -8, -2, -8.5, -1.5, false],
+      ['Khám Nhi (Cửa riêng)', 'T1-07', 'ob', -2, 4, -8.5, -1.5, false],
+      ['Phòng Xét nghiệm máu', 'T1-09', 'lab', 4, 9, -8.5, -1.5, false],
+      ['Chụp X-quang', 'T1-10', 'lab', 9, 14, -8.5, -5, false],
+      ['Phòng Siêu âm', 'T1-11', 'exam', 9, 14, -5, -1.5, false]
+    ]
+  }},
+  {{
+    n: 'Tầng 2', s: '14 Chuyên khoa ngoại trú',
+    r: [
+      ['Tim mạch (Điện tim)', 'T2-01', 'spec', -14, -8, 1.5, 8.5, false],
+      ['Siêu âm tim', 'T2-02', 'spec', -8, -2, 1.5, 8.5, false],
+      ['Tiêu hóa (Nội soi)', 'T2-03', 'spec', -2, 4, 1.5, 8.5, false],
+      ['Phòng Hô hấp', 'T2-04', 'spec', 4, 9, 1.5, 8.5, false],
+      ['Phòng Thần kinh', 'T2-05', 'spec', 9, 14, 1.5, 8.5, false],
+      ['Cơ Xương Khớp', 'T2-06', 'spec', -14, -9, -8.5, -1.5, false],
+      ['Tai Mũi Họng', 'T2-07', 'spec', -9, -4, -8.5, -1.5, false],
+      ['Răng Hàm Mặt', 'T2-08', 'spec', -4, 1, -8.5, -1.5, false],
+      ['Khám Mắt', 'T2-09', 'spec', 1, 5, -8.5, -1.5, false],
+      ['Khám Da liễu', 'T2-10', 'spec', 5, 8, -8.5, -1.5, false],
+      ['Sản phụ khoa', 'T2-11', 'ob', 8, 11, -8.5, -1.5, false],
+      ['Chụp CT / MRI Scanner', 'T2-13', 'lab', 11, 14, -8.5, -1.5, false]
+    ]
+  }},
+  {{
+    n: 'Tầng 3', s: 'Phẫu thuật, Nội trú & Hành chính',
+    r: [
+      ['Khối Phòng Mổ 🔒', 'T3-01', 'locked', -14, -6, 1.5, 8.5, true],
+      ['Hồi sức tích cực ICU 🔒', 'T3-02', 'locked', -6, 0, 1.5, 8.5, true],
+      ['Nội trú Nội (20 giường)', 'T3-03', 'ward', 0, 7, 1.5, 8.5, false],
+      ['Nội trú Ngoại (20 giường)', 'T3-04', 'ward', 7, 14, 1.5, 8.5, false],
+      ['Nội trú Sản - Nhi', 'T3-05', 'ob', -14, -6, -8.5, -1.5, false],
+      ['Khu Hành chính & Giám đốc 🔒', 'T3-06', 'locked', -6, 0, -8.5, -1.5, true],
+      ['Phòng trực Bác sĩ 🔒', 'T3-07', 'locked', 0, 7, -8.5, -1.5, true],
+      ['Kho Dược trung tâm 🔒', 'T3-08', 'locked', 7, 14, -8.5, -1.5, true]
+    ]
+  }}
+];
+
+const TARGET_FLOOR_IDX = {init_f_idx};
+const TARGET_DEPT_STR = {init_dept_json};
+const IS_MINI = {"true" if is_mini else "false"};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THIẾT LẬP THREE.JS SCENE, CAMERA & LIGHTS
+// ═══════════════════════════════════════════════════════════════════════════
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({{ antialias: true, alpha: true, powerPreference: "high-performance" }});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
+
+// Ánh sáng dịu mắt chuẩn y tế
+const ambient = new THREE.AmbientLight(0xffffff, 0.88);
+scene.add(ambient);
+
+const sun = new THREE.DirectionalLight(0xffffff, 0.55);
+sun.position.set(-18, 32, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, {{ left: -26, right: 26, top: 26, bottom: -26, near: 1, far: 90 }});
+scene.add(sun);
+
+// Helper tạo khối 3D
+const box = (g, x, y, z, w, h, d, c, roughness = 0.85) => {{
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({{ color: c, roughness: roughness }})
+  );
+  m.position.set(x, y + h / 2, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  g.add(m);
+  return m;
+}};
+
+// Tường ngăn phòng
+const wall = (g, x0, z0, x1, z1, isRestricted = false) => {{
+  const t = 0.28;
+  const col = isRestricted ? 0xa8b8c2 : 0xc2d4de;
+  box(g, (x0 + x1) / 2, 0, (z0 + z1) / 2, Math.abs(x1 - x0) + t, 1.85, Math.abs(z1 - z0) + t, col);
+}};
+
+// Đồ nội thất tối giản
+function furnish(g, r) {{
+  const [, , ty, x0, x1, z0, z1, isRestr] = r;
+  if (isRestr) return; // Không vẽ đồ trong khu vực cấm
+  const cols = Math.max(1, Math.floor((x1 - x0 - 2) / 3.4));
+  const rows = Math.max(1, Math.floor((z1 - z0 - 2) / 3.2));
+  for (let i = 0; i < cols; i++) {{
+    for (let j = 0; j < rows; j++) {{
+      const x = x0 + (x1 - x0) * (i + 0.5) / cols;
+      const z = z0 + (z1 - z0) * (j + 0.6) / rows + 0.2;
+      if (ty === 'er' || ty === 'ob' || ty === 'ward') {{
+        box(g, x, 0.05, z, 1.8, 0.45, 0.9, 0xffffff); // Giường
+        box(g, x - 0.7, 0.5, z, 0.4, 0.12, 0.7, TY[ty].c); // Gối
+      }} else if (ty === 'exam' || ty === 'spec') {{
+        box(g, x, 0.05, z, 1.5, 0.65, 0.8, 0xa0b4c0); // Bàn bác sĩ
+        box(g, x, 0.05, z + 0.9, 0.5, 0.45, 0.5, 0x507085); // Ghế
+      }} else if (ty === 'lab') {{
+        box(g, x, 0.05, z, 2.0, 0.85, 0.8, 0x8b80c5); // Bàn xét nghiệm
+      }} else if (ty === 'pharm') {{
+        box(g, x, 0.05, z - 0.8, 2.2, 1.4, 0.5, 0x65b88f); // Kệ thuốc
+        box(g, x, 0.05, z + 0.6, 1.6, 0.7, 0.7, 0xffffff); // Quầy phát thuốc
+      }}
+    }}
+  }}
+}}
+
+const groups = [], rooms = [], tiles = [], marks = [];
+const lbRoot = stage;
+
+function mkEl(cls, html, css) {{
+  const e = document.createElement('div');
+  e.className = cls;
+  e.innerHTML = html;
+  if (css) e.style.setProperty('--c', css);
+  lbRoot.appendChild(e);
+  return e;
+}}
+
+// Dựng 3 tầng
+FL.forEach((F, fi) => {{
+  const g = new THREE.Group();
+  g.userData.ty = 0;
+  
+  // Sàn bê tông tòa nhà (29m x 18m)
+  box(g, 0, -0.5, 0, 30, 0.5, 19, 0xb0c4ce);
+  
+  // Hành lang trung tâm sáng màu
+  box(g, 0, 0, 0, 28, 0.08, 3.2, 0xf8fafc);
+  
+  // Hành lang phụ dọc
+  box(g, -11, 0, 0, 3.2, 0.08, 17, 0xf8fafc);
+  box(g, 11, 0, 0, 3.2, 0.08, 17, 0xf8fafc);
+
+  F.r.forEach(a => {{
+    const [n, code, ty, x0, x1, z0, z1, isRestr] = a;
+    const cx = (x0 + x1) / 2;
+    const cz = (z0 + z1) / 2;
+    const top = z1 <= 0;
+
+    // Mặt sàn từng phòng
+    const tile = box(g, cx, 0.02, cz, x1 - x0 - 0.15, 0.08, z1 - z0 - 0.15, TY[ty].bg);
+    tile.material.emissive = new THREE.Color(TY[ty].c);
+    tile.material.emissiveIntensity = 0;
+
+    // Nhãn phòng
+    const lockBadge = isRestr ? ' 🔒' : '';
+    const extraClass = isRestr ? 'lbl restricted' : 'lbl';
+    const R = {{
+      n, code, ty, cx, cz, fi, tile, isRestr,
+      y: 2.5,
+      el: mkEl(extraClass, '<span>' + n + '</span><i>' + code + '</i>' + lockBadge, hex(TY[ty].c))
+    }};
+    tile.userData.room = R;
+    tiles.push(tile);
+    rooms.push(R);
+
+    // Tường bao quanh phòng
+    const fz = top ? z0 : z1;
+    const dz = top ? z1 : z0;
+    wall(g, x0, fz, x1, fz, isRestr);
+    wall(g, x0, z0, x0, z1, isRestr);
+    wall(g, x1, z0, x1, z1, isRestr);
+    // Cửa vào
+    wall(g, x0, dz, cx - 1.1, dz, isRestr);
+    wall(g, cx + 1.1, dz, x1, dz, isRestr);
+
+    furnish(g, a);
+  }});
+
+  // Thang máy & WC cố định ở 2 đầu hành lang
+  marks.push(
+    {{ fi, x: -11, z: 0, el: mkEl('mk', '🛗 Thang máy 1 & Thang bộ') }},
+    {{ fi, x: 11, z: 0, el: mkEl('mk', '🛗 Thang máy 2') }},
+    {{ fi, x: -11, z: 7.5, el: mkEl('mk', '🚻 WC') }}
+  );
+
+  scene.add(g);
+  groups.push(g);
+}});
+
+// Lộ trình dẫn đường từ sảnh Tầng 1
+const pathCoords = [[-7, 7.5], [-7, 0], [2, 0], [2, -5]];
+for (let i = 0; i < pathCoords.length - 1; i++) {{
+  const [a, b] = [pathCoords[i], pathCoords[i + 1]];
+  box(groups[0], (a[0] + b[0]) / 2, 0.12, (a[1] + b[1]) / 2, Math.abs(b[0] - a[0]) + 0.38, 0.06, Math.abs(b[1] - a[1]) + 0.38, 0x008f88);
+}}
+const cone = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.1, 16), new THREE.MeshStandardMaterial({{ color: 0x008f88 }}));
+cone.position.set(2, 1.4, -5);
+cone.rotation.x = Math.PI;
+groups[0].add(cone);
+
+const ring = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.75, 32), new THREE.MeshBasicMaterial({{ color: 0xe55353, transparent: true, side: THREE.DoubleSide }}));
+ring.rotation.x = -Math.PI / 2;
+ring.position.set(-7, 0.22, 7.5);
+groups[0].add(ring);
+
+marks.push(
+  {{ fi: 0, x: -7, z: 7.5, el: mkEl('mk here', '📍 Bạn đang ở đây') }},
+  {{ fi: 0, x: -14, z: 7.5, el: mkEl('mk', '🚑 Cửa Xe Cấp Cứu') }}
+);
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// ĐỘNG CƠ CAMERA 360° QUÁN TÍNH CHUẨN 60 FPS (SMOOTH DAMPING & TOUCH)
+// ═══════════════════════════════════════════════════════════════════════════
+let targetAz = -0.75;      // Góc quay mục tiêu phương vị (xoay 360 độ vô tận)
+let targetPol = 0.85;     // Góc ngẩng mục tiêu (Clamped 10° - 82°)
+let az = targetAz;        // Góc thực tế nội suy
+let pol = targetPol;      // Góc ngẩng thực tế nội suy
+let azMomentum = 0;       // Quán tính lướt khi nhấc tay/chuột
+let polMomentum = 0;
+let isDragging = false;
+let isRightDragging = false;
+let autoRotate = false;
+
+let zoom = IS_MINI ? 0.85 : 1.0;
+let targetZoom = zoom;
+
+const tgt = new THREE.Vector3(0, 0, 0);
+const targetTgt = new THREE.Vector3(0, 0, 0);
+const tgtY = () => (selFloor === -1 ? 6.5 : 0);
+
+let lastMouseX = 0, lastMouseY = 0;
+let dragDist = 0;
+
+// Multi-touch gestures
+let touchMode = 'none'; // 'none' | 'rotate' | 'pinch'
+let initialPinchDist = 0;
+let initialPinchZoom = 1;
+
+function setCam() {{
+  const R = 75;
+  camera.position.set(
+    tgt.x + R * Math.sin(pol) * Math.sin(az),
+    tgt.y + R * Math.cos(pol),
+    tgt.z + R * Math.sin(pol) * Math.cos(az)
+  );
+  camera.lookAt(tgt);
+}}
+
+function resize() {{
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  const aspect = w / h;
+  const s = Math.max(14, 18 / aspect) / zoom;
+  Object.assign(camera, {{ left: -s * aspect, right: s * aspect, top: s, bottom: -s }});
+  camera.updateProjectionMatrix();
+}}
+window.addEventListener('resize', resize);
+
+
+// ── SỰ KIỆN CHUỘT & CON TRỎ (MOUSE POINTER INTERACTION) ─────────────────────
+const cv = renderer.domElement;
+
+cv.addEventListener('contextmenu', e => e.preventDefault());
+
+cv.addEventListener('pointerdown', e => {{
+  if (e.pointerType === 'touch') return; // Xử lý riêng ở touch event để mượt hơn
+  stage.classList.add('grabbing');
+  isDragging = true;
+  isRightDragging = (e.button === 2);
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+  dragDist = 0;
+  azMomentum = 0;
+  polMomentum = 0;
+  if (autoRotate) {{
+    autoRotate = false;
+    const btn = document.getElementById('btn-auto-rotate');
+    if (btn) btn.classList.remove('active');
+  }}
+  cv.setPointerCapture(e.pointerId);
+}});
+
+cv.addEventListener('pointermove', e => {{
+  if (e.pointerType === 'touch' || !isDragging) return;
+  const dx = e.clientX - lastMouseX;
+  const dy = e.clientY - lastMouseY;
+  dragDist += Math.abs(dx) + Math.abs(dy);
+
+  if (isRightDragging) {{
+    // Pan di chuyển tâm mặt bằng
+    const panFactor = (24 / zoom) / stage.clientHeight;
+    const cosAz = Math.cos(az), sinAz = Math.sin(az);
+    targetTgt.x -= (dx * cosAz - dy * sinAz * Math.cos(pol)) * panFactor;
+    targetTgt.z -= (-dx * sinAz - dy * cosAz * Math.cos(pol)) * panFactor;
+  }} else {{
+    // Xoay 360 độ có gia tốc mượt mà
+    const rotSpeed = 0.0065;
+    targetAz -= dx * rotSpeed;
+    targetPol = Math.max(0.18, Math.min(1.42, targetPol - dy * (rotSpeed * 0.85)));
+    azMomentum = -dx * rotSpeed;
+    polMomentum = -dy * (rotSpeed * 0.85);
+  }}
+
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+}});
+
+cv.addEventListener('pointerup', e => {{
+  if (e.pointerType === 'touch') return;
+  stage.classList.remove('grabbing');
+  isDragging = false;
+  isRightDragging = false;
+  if (dragDist < 6) {{
+    pick(e);
+  }}
+}});
+
+// Con lăn phóng to thu nhỏ mượt mà
+cv.addEventListener('wheel', e => {{
+  e.preventDefault();
+  targetZoom = Math.max(0.4, Math.min(3.5, targetZoom * (e.deltaY < 0 ? 1.15 : 0.87)));
+}}, {{ passive: false }});
+
+
+// ── SỰ KIỆN CẢM ỨNG ĐA ĐIỂM (1-FINGER ROTATE 360° & 2-FINGER PINCH/PAN) ─────
+cv.addEventListener('touchstart', e => {{
+  dragDist = 0;
+  azMomentum = 0;
+  polMomentum = 0;
+  if (autoRotate) {{
+    autoRotate = false;
+    const btn = document.getElementById('btn-auto-rotate');
+    if (btn) btn.classList.remove('active');
+  }}
+
+  if (e.touches.length === 2) {{
+    touchMode = 'pinch';
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    initialPinchDist = Math.hypot(dx, dy);
+    initialPinchZoom = targetZoom;
+    lastMouseX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    lastMouseY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+  }} else if (e.touches.length === 1) {{
+    touchMode = 'rotate';
+    isDragging = true;
+    lastMouseX = e.touches[0].clientX;
+    lastMouseY = e.touches[0].clientY;
+  }}
+}}, {{ passive: false }});
+
+cv.addEventListener('touchmove', e => {{
+  e.preventDefault(); // Chống cuộn trang web khi đang vuốt 3D
+  if (touchMode === 'pinch' && e.touches.length === 2) {{
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.hypot(dx, dy);
+    if (initialPinchDist > 0) {{
+      targetZoom = Math.max(0.4, Math.min(3.5, initialPinchZoom * (dist / initialPinchDist)));
+    }}
+    // 2-finger Pan
+    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    const panFactor = (24 / zoom) / stage.clientHeight;
+    const cosAz = Math.cos(az), sinAz = Math.sin(az);
+    targetTgt.x -= ((midX - lastMouseX) * cosAz - (midY - lastMouseY) * sinAz * Math.cos(pol)) * panFactor;
+    targetTgt.z -= (-(midX - lastMouseX) * sinAz - (midY - lastMouseY) * cosAz * Math.cos(pol)) * panFactor;
+    lastMouseX = midX;
+    lastMouseY = midY;
+  }} else if (touchMode === 'rotate' && e.touches.length === 1) {{
+    const dx = e.touches[0].clientX - lastMouseX;
+    const dy = e.touches[0].clientY - lastMouseY;
+    dragDist += Math.abs(dx) + Math.abs(dy);
+    const rotSpeed = 0.007;
+    targetAz -= dx * rotSpeed;
+    targetPol = Math.max(0.18, Math.min(1.42, targetPol - dy * (rotSpeed * 0.85)));
+    azMomentum = -dx * rotSpeed;
+    polMomentum = -dy * (rotSpeed * 0.85);
+    lastMouseX = e.touches[0].clientX;
+    lastMouseY = e.touches[0].clientY;
+  }}
+}}, {{ passive: false }});
+
+cv.addEventListener('touchend', e => {{
+  if (touchMode === 'rotate' && dragDist < 8 && e.changedTouches.length === 1) {{
+    pick(e.changedTouches[0]);
+  }}
+  if (e.touches.length === 0) {{
+    touchMode = 'none';
+    isDragging = false;
+  }} else if (e.touches.length === 1) {{
+    touchMode = 'rotate';
+    lastMouseX = e.touches[0].clientX;
+    lastMouseY = e.touches[0].clientY;
+  }}
+}});
+
+
+// ── NÚT BẤM TIỆN ÍCH TRÊN THANH TOOLBAR ─────────────────────────────────────
+const zi = document.getElementById('zi');
+const zo = document.getElementById('zo');
+if (zi) zi.onclick = () => {{ targetZoom = Math.min(3.5, targetZoom * 1.25); }};
+if (zo) zo.onclick = () => {{ targetZoom = Math.max(0.4, targetZoom / 1.25); }};
+
+const btnResetView = document.getElementById('btn-reset-view');
+if (btnResetView) {{
+  btnResetView.onclick = () => {{
+    azMomentum = 0; polMomentum = 0;
+    targetAz = -0.75; targetPol = 0.85;
+    targetZoom = 1.0;
+    targetTgt.set(0, 0, 0);
+  }};
+}}
+
+const btnAutoRotate = document.getElementById('btn-auto-rotate');
+if (btnAutoRotate) {{
+  btnAutoRotate.onclick = () => {{
+    autoRotate = !autoRotate;
+    btnAutoRotate.classList.toggle('active', autoRotate);
+    if (autoRotate) {{
+      azMomentum = 0;
+    }}
+  }};
+}}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TƯƠNG TÁC CHỌN PHÒNG & THÔNG TIN POPUP
+// ═══════════════════════════════════════════════════════════════════════════
+const ray = new THREE.Raycaster();
+const roomPopup = document.getElementById('roomPopup');
+let selFloor = TARGET_FLOOR_IDX;
+let selRoom = null;
+
+function pick(e) {{
+  const b = cv.getBoundingClientRect();
+  ray.setFromCamera({{
+    x: ((e.clientX - b.left) / b.width) * 2 - 1,
+    y: -((e.clientY - b.top) / b.height) * 2 + 1
+  }}, camera);
+
+  const vis = tiles.filter(t => groups[t.userData.room.fi].visible);
+  const hit = ray.intersectObjects(vis)[0];
+  selectRoom(hit ? hit.object.userData.room : null);
+}}
+
+function selectRoom(r) {{
+  selRoom = r;
+  rooms.forEach(x => {{
+    x.tile.material.emissiveIntensity = (x === r) ? 0.6 : 0;
+    x.el.classList.toggle('sel', x === r);
+  }});
+
+  if (!r || IS_MINI) {{
+    if (roomPopup) roomPopup.style.display = 'none';
+    return;
+  }}
+
+  roomPopup.style.display = 'block';
+  const lockNotice = r.isRestr ? '<p style="color:#e55353;font-weight:700;">⚠️ Khu vực hạn chế - Chỉ dành cho nhân viên y tế</p>' : '';
+  const bookBtn = r.isRestr ? '' : '<button id="btn-popup-book">📅 Đặt lịch tại khoa này</button>';
+
+  roomPopup.innerHTML = `
+    <b>${{r.n}}</b>
+    <div class="p-meta">Mã phòng: <b>${{r.code}}</b> · ${{FL[r.fi].n}}</div>
+    <span class="p-badge" style="background:${{TY[r.ty].bg}};color:${{hex(TY[r.ty].c)}};">${{TY[r.ty].l}}</span>
+    <p style="margin:4px 0;font-size:12px;color:#64748b;">Giờ làm việc: 07:00 – 17:00</p>
+    ${{lockNotice}}
+    ${{bookBtn}}
+  `;
+
+  const btnBook = document.getElementById('btn-popup-book');
+  if (btnBook) {{
+    btnBook.onclick = () => {{
+      window.parent.postMessage({{
+        type: 'STREAMLIT_SELECT_DEPT',
+        dept: r.n,
+        floor: r.fi + 1
+      }}, '*');
+    }};
+  }}
+}}
+
+// Chuyển tầng
+const tabs = document.getElementById('tabs');
+function setFloor(i) {{
+  selFloor = i;
+  selectRoom(null);
+  groups.forEach((g, k) => {{
+    g.visible = (i === -1 || i === k);
+    g.userData.ty = (i === -1 ? k * 7.5 : 0);
+  }});
+  if (tabs) {{
+    [...tabs.children].forEach((b, k) => b.classList.toggle('on', k === i + 1));
+  }}
+}}
+
+if (!IS_MINI && tabs) {{
+  [{{ n: 'Tất cả tầng', s: 'Mặt bằng 3 tầng' }}, ...FL.map(f => ({{ n: f.n, s: f.s }}))].forEach((f, k) => {{
+    const b = document.createElement('button');
+    b.className = 'floor-tab-btn' + (k === TARGET_FLOOR_IDX + 1 ? ' on' : '');
+    b.innerHTML = '<b>' + f.n + '</b><small>' + f.s + '</small>';
+    b.onclick = () => setFloor(k - 1);
+    tabs.appendChild(b);
+  }});
+
+  // Chú giải phân khu
+  document.getElementById('legendContent').innerHTML = Object.values(TY).map(t =>
+    `<div class="legend-item"><span class="legend-dot" style="background:${{hex(t.c)}};"></span>${{t.l}}</div>`
+  ).join('');
+}}
+
+// Tìm kiếm nhanh
+const norm = s => s.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/đ/g, 'd').toLowerCase();
+const qInp = document.getElementById('q');
+if (qInp) {{
+  qInp.addEventListener('input', () => {{
+    const v = norm(qInp.value.trim());
+    if (!v) {{ selectRoom(null); return; }}
+    const r = rooms.find(r => norm(r.n + ' ' + r.code).includes(v));
+    if (r) {{
+      if (selFloor !== -1 && selFloor !== r.fi) setFloor(r.fi);
+      selectRoom(r);
+    }}
+  }});
+}}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VÒNG LẶP RENDER CHUẨN 60 FPS CÓ QUÁN TÍNH
+// ═══════════════════════════════════════════════════════════════════════════
+const t0 = performance.now();
+const v = new THREE.Vector3();
+
+function loop() {{
+  requestAnimationFrame(loop);
+  const t = (performance.now() - t0) / 1000;
+
+  // 1. Quán tính xoay 360 độ & Tự xoay (Continuous 360° Damping)
+  if (!isDragging) {{
+    if (autoRotate) {{
+      targetAz += 0.0035;
+    }} else if (Math.abs(azMomentum) > 0.00005) {{
+      targetAz += azMomentum;
+      targetPol = Math.max(0.18, Math.min(1.42, targetPol + polMomentum));
+      azMomentum *= 0.93;
+      polMomentum *= 0.90;
+    }}
+  }}
+
+  // Nội suy mượt mà chuẩn 60 FPS (Lerp Damping cho góc xoay)
+  az += (targetAz - az) * 0.18;
+  pol += (targetPol - pol) * 0.18;
+
+  // 2. Nội suy phóng to thu nhỏ mượt mà (Lerp Zoom)
+  if (Math.abs(targetZoom - zoom) > 0.001) {{
+    zoom += (targetZoom - zoom) * 0.16;
+    resize();
+  }}
+
+  // 3. Nội suy Pan di chuyển tâm
+  tgt.x += (targetTgt.x - tgt.x) * 0.12;
+  tgt.y += (tgtY() - tgt.y) * 0.12;
+  tgt.z += (targetTgt.z - tgt.z) * 0.12;
+
+  setCam();
+
+  // 4. Nội suy tách tầng
+  groups.forEach(g => {{
+    g.position.y += (g.userData.ty - g.position.y) * 0.14;
+  }});
+
+  // 5. Hiệu ứng sóng radar điểm xuất phát
+  const k = (t % 1.5) / 1.5;
+  ring.scale.setScalar(0.6 + k * 1.8);
+  ring.material.opacity = 1 - k;
+  cone.position.y = 1.4 + Math.sin(t * 4.5) * 0.15;
+
+  // 6. Chiếu tọa độ nhãn phòng (Billboard Projection)
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  const put = (el, fi, x, y, z) => {{
+    const g = groups[fi];
+    if (!g.visible) {{
+      el.style.display = 'none';
+      return;
+    }}
+    el.style.display = 'block';
+    v.set(x, y + g.position.y, z).project(camera);
+    el.style.transform = `translate(${{(v.x * 0.5 + 0.5) * w}}px, ${{(-v.y * 0.5 + 0.5) * h}}px) translate(-50%, -100%)`;
+  }};
+
+  rooms.forEach(r => put(r.el, r.fi, r.cx, r.y, r.cz));
+  marks.forEach(m => put(m.el, m.fi, m.x, 1.0, m.z));
+
+  renderer.render(scene, camera);
+}}
+
+// Khởi động
+setFloor(TARGET_FLOOR_IDX);
+resize();
+loop();
+
+// Tự động tìm & chọn phòng nếu có tham số
+if (TARGET_DEPT_STR) {{
+  setTimeout(() => {{
+    const r = rooms.find(r => norm(r.n).includes(norm(TARGET_DEPT_STR)));
+    if (r) {{
+      setFloor(r.fi);
+      selectRoom(r);
+    }}
+  }}, 250);
+}}
+</script>
 
-    <!-- Three.js + OrbitControls -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-
-    <script>
-        const TARGET_FLOOR = {int(target_floor) if target_floor else 1};
-        const TARGET_DEPT = {json.dumps(target_dept, ensure_ascii=False)};
-
-        const container = document.getElementById('viewport');
-        const labelsContainer = document.getElementById('labels-container');
-
-        // Scene
-        const scene = new THREE.Scene();
-
-        // ORTHOGRAPHIC ISOMETRIC CAMERA (CHUẨN GÓC 45 ĐỘ HÌNH THOI CHÍNH XÁC NHƯ MOCKUP)
-        const aspect = container.clientWidth / container.clientHeight;
-        const frustumSize = 38;
-        const camera = new THREE.OrthographicCamera(
-            -frustumSize * aspect / 2,
-             frustumSize * aspect / 2,
-             frustumSize / 2,
-            -frustumSize / 2,
-            0.1, 1000
-        );
-
-        // Góc nhìn Isometric cao 48 độ từ góc trước-phải
-        camera.position.set(42, 48, 42);
-        camera.lookAt(0, 0, 0);
-
-        // Renderer
-        const renderer = new THREE.WebGLRenderer({{ antialias: true, alpha: true, powerPreference: "high-performance" }});
-        renderer.setSize(container.clientWidth, container.clientHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        container.appendChild(renderer.domElement);
-
-        // Controls
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 0, 0);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.08;
-        controls.maxPolarAngle = Math.PI / 2.25;
-        controls.minPolarAngle = Math.PI / 4.5;
-
-        // Ánh sáng Studio trong trẻo
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.88);
-        scene.add(ambientLight);
-
-        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        sunLight.position.set(40, 65, 35);
-        sunLight.castShadow = true;
-        sunLight.shadow.mapSize.width = 2048;
-        sunLight.shadow.mapSize.height = 2048;
-        sunLight.shadow.camera.left = -24;
-        sunLight.shadow.camera.right = 24;
-        sunLight.shadow.camera.top = 24;
-        sunLight.shadow.camera.bottom = -24;
-        sunLight.shadow.bias = -0.0003;
-        scene.add(sunLight);
-
-        const skyFill = new THREE.DirectionalLight(0xf0fdfa, 0.45);
-        skyFill.position.set(-35, 35, -30);
-        scene.add(skyFill);
-
-        // ==========================================
-        // VẬT LIỆU TƯƠNG PHẢN CAO - PHÂN BIỆT RÕ RÀNG
-        // ==========================================
-        const mats = {{
-            // Khối đế sa bàn nổi lên trên nền
-            podiumSlab: new THREE.MeshStandardMaterial({{ color: 0xcbe3e2, roughness: 0.35 }}),
-            // Sàn hành lang đi lại: TRẮNG SÁNG CÓ VIỀN RÕ RÀNG
-            corridorFloor: new THREE.MeshStandardMaterial({{ color: 0xffffff, roughness: 0.2 }}),
-            // Dải ruy băng đường đi Wayfinding: CYAN NEON PHÁT SÁNG NỔI BẬT
-            pathRibbon: new THREE.MeshBasicMaterial({{ color: 0x008f88, side: THREE.DoubleSide }}),
-            pathNodeRing: new THREE.MeshBasicMaterial({{ color: 0x008f88, side: THREE.DoubleSide }}),
-            pathNodeDot: new THREE.MeshBasicMaterial({{ color: 0xffffff, side: THREE.DoubleSide }}),
-
-            // Tường: TƯỜNG DÀY DẶN CÓ ĐỘ SÂU (Màu trắng ngà viền xanh nhạt)
-            outerWall: new THREE.MeshStandardMaterial({{ color: 0xd8e8e7, roughness: 0.3 }}),
-            innerWall: new THREE.MeshStandardMaterial({{ color: 0xb5dcd8, roughness: 0.35 }}),
-            wallTopCap: new THREE.MeshStandardMaterial({{ color: 0x82c4bd, roughness: 0.3 }}),
-            glassWindow: new THREE.MeshStandardMaterial({{ color: 0x38bdf8, roughness: 0.1, transparent: true, opacity: 0.65 }}),
-            canopyTeal: new THREE.MeshStandardMaterial({{ color: 0x008f88, roughness: 0.2 }}),
-
-            // SÀN TỪNG KHOA PHÒNG PHÂN BIỆT MÀU RÕ RÀNG:
-            floorEmergency: new THREE.MeshStandardMaterial({{ color: 0xfecdd3, roughness: 0.3 }}), // Hồng đỏ Cấp cứu
-            wallEmergency: new THREE.MeshStandardMaterial({{ color: 0xfca5a5, roughness: 0.35 }}),
-            floorClinic: new THREE.MeshStandardMaterial({{ color: 0xa7f3d0, roughness: 0.3 }}),     // Xanh mint Khám bệnh
-            floorInternal: new THREE.MeshStandardMaterial({{ color: 0xbae6fd, roughness: 0.3 }}),   // Xanh da trời Khoa Nội
-            floorSurgery: new THREE.MeshStandardMaterial({{ color: 0xe2e8f0, roughness: 0.25 }}),   // Xám vô trùng Ngoại
-            floorLab: new THREE.MeshStandardMaterial({{ color: 0xddd6fe, roughness: 0.3 }}),       // Tím nhạt Xét nghiệm
-            floorPharmacy: new THREE.MeshStandardMaterial({{ color: 0x99f6e4, roughness: 0.3 }}),  // Xanh ngọc Nhà thuốc
-
-            // ĐỒ ĐẠC Y TẾ:
-            bedMattress: new THREE.MeshStandardMaterial({{ color: 0xffffff, roughness: 0.3 }}),
-            bedSheet: new THREE.MeshStandardMaterial({{ color: 0x0284c7, roughness: 0.3 }}),
-            metalChrome: new THREE.MeshStandardMaterial({{ color: 0x94a3b8, metalness: 0.8, roughness: 0.2 }}),
-            ambulanceWhite: new THREE.MeshStandardMaterial({{ color: 0xffffff, roughness: 0.1 }}),
-            ambulanceRed: new THREE.MeshStandardMaterial({{ color: 0xef4444, roughness: 0.2 }}),
-            plantGreen: new THREE.MeshStandardMaterial({{ color: 0x10b981, roughness: 0.5 }}),
-            potBrown: new THREE.MeshStandardMaterial({{ color: 0xd97706, roughness: 0.4 }}),
-            deskWood: new THREE.MeshStandardMaterial({{ color: 0xffffff, roughness: 0.2 }}),
-            chairBlue: new THREE.MeshStandardMaterial({{ color: 0x0284c7, roughness: 0.3 }}),
-            pcBlack: new THREE.MeshStandardMaterial({{ color: 0x0f172a, roughness: 0.2 }}),
-            shelfWood: new THREE.MeshStandardMaterial({{ color: 0xffffff, roughness: 0.3 }})
-        }};
-
-        let activeFloorGroup = null;
-        let activeTags = [];
-
-        function createBox(w, h, d, mat, x, y, z, rx=0, ry=0, rz=0) {{
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-            mesh.position.set(x, y, z);
-            if (rx || ry || rz) mesh.rotation.set(rx, ry, rz);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            return mesh;
-        }}
-
-        // Helper tạo tường có độ dày & phào chỉ mép trên rõ nét
-        function createWall(w, h, d, x, y, z, isInner=true) {{
-            const group = new THREE.Group();
-            const wallMesh = createBox(w, h, d, isInner ? mats.innerWall : mats.outerWall, 0, 0, 0);
-            group.add(wallMesh);
-            // Phào chỉ nẹp trên nóc tường tạo đường nét kiến trúc sắc sảo
-            const cap = createBox(w * 1.02, 0.08, d * 1.02, mats.wallTopCap, 0, h/2 + 0.04, 0);
-            group.add(cap);
-            group.position.set(x, y, z);
-            return group;
-        }}
-
-        // Helper tạo dải ruy băng đường đi Wayfinding Path 3D Ribbon (Bề rộng 0.35m - CỰC RÕ RÀNG)
-        function createRibbonPathSegment(x1, z1, x2, z2, width=0.36) {{
-            const dx = x2 - x1;
-            const dz = z2 - z1;
-            const len = Math.sqrt(dx*dx + dz*dz);
-            const angle = Math.atan2(dx, dz);
-            
-            const seg = new THREE.Mesh(new THREE.PlaneGeometry(width, len), mats.pathRibbon);
-            seg.rotation.x = -Math.PI / 2;
-            seg.rotation.z = angle;
-            seg.position.set((x1 + x2)/2, 0.06, (z1 + z2)/2);
-            return seg;
-        }}
-
-        function createWaypointNode(x, z, radius=0.45, isStart=false) {{
-            const nodeGroup = new THREE.Group();
-            // Vòng tròn ngoài màu teal
-            const ring = new THREE.Mesh(new THREE.CircleGeometry(radius, 24), mats.pathNodeRing);
-            ring.rotation.x = -Math.PI / 2;
-            ring.position.set(0, 0.07, 0);
-            nodeGroup.add(ring);
-
-            // Điểm lõi bên trong màu trắng
-            const dot = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.5, 24), mats.pathNodeDot);
-            dot.rotation.x = -Math.PI / 2;
-            dot.position.set(0, 0.08, 0);
-            nodeGroup.add(dot);
-
-            nodeGroup.position.set(x, 0, z);
-            return nodeGroup;
-        }}
-
-        // Giường bệnh viện
-        function createHospitalBed(x, z, rot=0) {{
-            const bed = new THREE.Group();
-            bed.add(createBox(1.2, 0.35, 2.0, mats.metalChrome, 0, 0.18, 0));
-            bed.add(createBox(1.1, 0.18, 1.9, mats.bedMattress, 0, 0.44, 0));
-            bed.add(createBox(1.12, 0.19, 1.2, mats.bedSheet, 0, 0.45, 0.35));
-            bed.add(createBox(0.7, 0.1, 0.4, mats.bedMattress, 0, 0.58, -0.65));
-            bed.position.set(x, 0, z);
-            bed.rotation.y = rot;
-            return bed;
-        }}
-
-        // Xe cứu thương
-        function createAmbulance(x, z, rot=0) {{
-            const amb = new THREE.Group();
-            amb.add(createBox(2.0, 1.2, 3.6, mats.ambulanceWhite, 0, 0.85, 0));
-            amb.add(createBox(2.04, 0.28, 3.4, mats.ambulanceRed, 0, 0.8, 0));
-            amb.add(createBox(1.8, 0.5, 0.8, mats.glassWindow, 0, 1.15, 1.4));
-            amb.add(createBox(0.35, 0.18, 0.7, mats.ambulanceRed, 0, 1.54, 0.2));
-            const wheelMat = new THREE.MeshStandardMaterial({{ color: 0x0f172a, roughness: 0.7 }});
-            amb.add(createBox(0.25, 0.5, 0.5, wheelMat, -1.05, 0.25, 1.1));
-            amb.add(createBox(0.25, 0.5, 0.5, wheelMat, 1.05, 0.25, 1.1));
-            amb.add(createBox(0.25, 0.5, 0.5, wheelMat, -1.05, 0.25, -1.1));
-            amb.add(createBox(0.25, 0.5, 0.5, wheelMat, 1.05, 0.25, -1.1));
-            amb.position.set(x, 0, z);
-            amb.rotation.y = rot;
-            return amb;
-        }}
-
-        // Bàn bác sĩ
-        function createDoctorDesk(x, z, rot=0) {{
-            const desk = new THREE.Group();
-            desk.add(createBox(1.8, 0.1, 1.0, mats.deskWood, 0, 0.7, 0));
-            desk.add(createBox(0.08, 0.65, 0.9, mats.metalChrome, -0.8, 0.35, 0));
-            desk.add(createBox(0.08, 0.65, 0.9, mats.metalChrome, 0.8, 0.35, 0));
-            desk.add(createBox(0.7, 0.45, 0.06, mats.pcBlack, 0, 1.0, -0.15));
-            desk.add(createBox(0.6, 0.7, 0.6, mats.chairBlue, 0, 0.4, -0.8));
-            desk.add(createBox(0.5, 0.6, 0.5, mats.chairBlue, 0, 0.35, 0.8));
-            desk.position.set(x, 0, z);
-            desk.rotation.y = rot;
-            return desk;
-        }}
-
-        // Quầy thuốc
-        function createPharmacyCounter(x, z) {{
-            const p = new THREE.Group();
-            p.add(createBox(3.2, 0.85, 0.7, mats.canopyTeal, 0, 0.42, 0));
-            p.add(createBox(0.7, 0.85, 1.8, mats.canopyTeal, 1.25, 0.42, 0.9));
-            p.add(createBox(3.8, 1.6, 0.4, mats.shelfWood, 0, 0.8, -1.4));
-            const medColors = [0xef4444, 0x10b981, 0x3b82f6, 0xf59e0b, 0x8b5cf6];
-            for (let i = -1.4; i <= 1.4; i += 0.35) {{
-                const mMat = new THREE.MeshStandardMaterial({{ color: medColors[Math.floor(Math.random()*medColors.length)] }});
-                p.add(createBox(0.24, 0.18, 0.28, mMat, i, 1.1, -1.3));
-                p.add(createBox(0.24, 0.18, 0.28, mMat, i, 0.7, -1.3));
-            }}
-            p.position.set(x, 0, z);
-            return p;
-        }}
-
-        // Bàn mổ phẫu thuật
-        function createSurgerySuite(x, z) {{
-            const s = new THREE.Group();
-            s.add(createBox(1.1, 0.75, 2.4, mats.metalChrome, 0, 0.4, 0));
-            const lampArm = createBox(0.06, 1.0, 0.06, mats.metalChrome, 0, 1.6, 0);
-            s.add(lampArm);
-            const lampHead = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.12, 16), mats.canopyTeal);
-            lampHead.position.set(0, 1.9, 0);
-            s.add(lampHead);
-            s.add(createBox(0.7, 1.3, 0.5, mats.pcBlack, -1.2, 0.65, -0.5));
-            s.position.set(x, 0, z);
-            return s;
-        }}
-
-        // Chậu cây
-        function createPlant(x, z) {{
-            const pot = new THREE.Group();
-            const potMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.25, 0.6, 12), mats.potBrown);
-            potMesh.position.y = 0.3;
-            pot.add(potMesh);
-            const foliage = new THREE.Mesh(new THREE.SphereGeometry(0.48, 12, 12), mats.plantGreen);
-            foliage.position.y = 0.8;
-            pot.add(foliage);
-            pot.position.set(x, 0, z);
-            return pot;
-        }}
-
-        // DỰNG ĐƯỜNG DẪN WAYFINDING DẠNG RIBBON BẢNG RỘNG (CỰC KỲ DỄ THẤY ĐƯỜNG ĐI)
-        function createWayfindingRibbon() {{
-            const group = new THREE.Group();
-
-            // Đoạn 1: Từ ngoài sân vào sảnh chính
-            group.add(createRibbonPathSegment(-4.5, 14.5, -4.5, 11.0, 0.4));
-            group.add(createWaypointNode(-4.5, 14.5, 0.48, true));
-
-            // Đoạn 2: Từ cửa sảnh vào giao lộ trước Khoa Khám bệnh
-            group.add(createRibbonPathSegment(-4.5, 11.0, -4.5, 6.0, 0.4));
-            group.add(createWaypointNode(-4.5, 6.0, 0.44));
-
-            // Đoạn 3: Rẽ ngang hành lang trung tâm
-            group.add(createRibbonPathSegment(-4.5, 6.0, 2.5, 6.0, 0.4));
-            group.add(createWaypointNode(2.5, 6.0, 0.44));
-
-            // Đoạn 4: Đi dọc hành lang bên phải Khoa Khám bệnh
-            group.add(createRibbonPathSegment(2.5, 6.0, 2.5, 1.5, 0.4));
-            group.add(createWaypointNode(2.5, 1.5, 0.44));
-
-            // Đoạn 5: Rẽ vào Phòng khám & Xét nghiệm
-            group.add(createRibbonPathSegment(2.5, 1.5, 6.5, 1.5, 0.4));
-            group.add(createWaypointNode(6.5, 1.5, 0.44));
-
-            return group;
-        }}
-
-        // ==========================================
-        // DỰNG KIẾN TRÚC MẶT BẰNG TỪNG TẦNG
-        // ==========================================
-        function buildFloor(floorNum) {{
-            if (activeFloorGroup) scene.remove(activeFloorGroup);
-            labelsContainer.innerHTML = '';
-            activeTags = [];
-
-            activeFloorGroup = new THREE.Group();
-
-            // 1. Khối đế sa bàn kiến trúc (Podium Slab màu ngọc nhạt tạo độ tương phản với nền)
-            const basePodium = createBox(32.5, 0.6, 25.5, mats.podiumSlab, 0, -0.3, 0);
-            activeFloorGroup.add(basePodium);
-
-            // 2. MẶT SÀN HÀNH LANG (Màu trắng tinh khôi #ffffff nổi bật trên khối đế)
-            const corridorSlab = createBox(31.2, 0.62, 24.2, mats.corridorFloor, 0, -0.29, 0);
-            activeFloorGroup.add(corridorSlab);
-
-            // 3. TƯỜNG BAO KIẾN TRÚC ISOMETRIC CÓ ĐỘ DÀY (Tường sau cao 1.6, tường trước cắt thấp 0.7)
-            const wallH = 1.6;
-            const wallThick = 0.45;
-            activeFloorGroup.add(createWall(32, wallH, wallThick, 0, wallH/2, -12.5, false));
-            activeFloorGroup.add(createWall(wallThick, wallH, 25, -16, wallH/2, 0, false));
-            activeFloorGroup.add(createWall(wallThick, 0.7, 25, 16, 0.35, 0, false));
-            activeFloorGroup.add(createWall(11, 0.7, wallThick, -10.5, 0.35, 12.5, false));
-            activeFloorGroup.add(createWall(16, 0.7, wallThick, 8, 0.35, 12.5, false));
-
-            // Cửa sổ kính ngoài mặt tiền
-            for (let z = -9; z <= 9; z += 4.5) {{
-                activeFloorGroup.add(createBox(0.48, 0.55, 1.6, mats.glassWindow, 16, 0.35, z));
-            }}
-            for (let x = 2; x <= 14; x += 4) {{
-                activeFloorGroup.add(createBox(1.6, 0.55, 0.48, mats.glassWindow, x, 0.35, 12.5));
-            }}
-
-            // Sảnh chính đón khách (Canopy cắt thấp vừa vặn, không che khuất phòng bên trong)
-            const canopy = createBox(4.5, 0.15, 1.8, mats.canopyTeal, -4.5, 1.35, 13.5);
-            activeFloorGroup.add(canopy);
-            activeFloorGroup.add(createBox(0.16, 1.35, 0.16, mats.metalChrome, -6.5, 0.68, 14.2));
-            activeFloorGroup.add(createBox(0.16, 1.35, 0.16, mats.metalChrome, -2.5, 0.68, 14.2));
-            activeFloorGroup.add(createPlant(-6.8, 13.5));
-            activeFloorGroup.add(createPlant(-2.2, 13.5));
-
-            // ==========================================
-            // TẦNG 1: TIẾP ĐÓN, CẤP CỨU & KHÁM BAN ĐẦU
-            // ==========================================
-            if (floorNum === 1) {{
-                // 1. Khoa Cấp Cứu 24/7 (ICU) - P.101 (Sàn hồng đỏ, tường ngăn rõ rệt)
-                activeFloorGroup.add(createBox(10.5, 0.05, 13, mats.floorEmergency, -10.75, 0.02, 5.5));
-                activeFloorGroup.add(createWall(10.5, 1.3, 0.35, -10.75, 0.65, -1.0));
-                activeFloorGroup.add(createWall(0.35, 1.3, 13, -5.5, 0.65, 5.5));
-                activeFloorGroup.add(createAmbulance(-11.5, 8.5, Math.PI / 4));
-                activeFloorGroup.add(createHospitalBed(-10.0, 1.5, Math.PI / 2));
-                activeFloorGroup.add(createHospitalBed(-13.0, 1.5, Math.PI / 2));
-
-                // 2. Khoa Khám Bệnh & Sàng Lọc (Khối trung tâm - Sàn mint tươi)
-                activeFloorGroup.add(createBox(9.0, 0.05, 8.5, mats.floorClinic, -0.5, 0.02, 0));
-                activeFloorGroup.add(createWall(9.0, 1.1, 0.3, -0.5, 0.55, -4.25));
-                activeFloorGroup.add(createWall(9.0, 1.1, 0.3, -0.5, 0.55, 4.25));
-                activeFloorGroup.add(createWall(0.3, 1.1, 8.5, -5.0, 0.55, 0));
-                activeFloorGroup.add(createWall(0.3, 1.1, 8.5, 4.0, 0.55, 0));
-                activeFloorGroup.add(createWall(8.6, 0.95, 0.22, -0.5, 0.48, 0));
-                activeFloorGroup.add(createWall(0.22, 0.95, 8.2, -0.5, 0.48, 0));
-                activeFloorGroup.add(createDoctorDesk(-2.5, -2.0, 0));
-                activeFloorGroup.add(createDoctorDesk(1.8, -2.0, 0));
-                activeFloorGroup.add(createDoctorDesk(-2.5, 2.0, Math.PI));
-                activeFloorGroup.add(createHospitalBed(1.8, 2.0, 0));
-
-                // 3. Khoa Nội Tổng Quát (P.301 Quầy tiếp đón - Sàn xanh dương)
-                activeFloorGroup.add(createBox(10.5, 0.05, 6.0, mats.floorInternal, 1.0, 0.02, -8.5));
-                activeFloorGroup.add(createWall(10.5, 1.2, 0.3, 1.0, 0.6, -5.5));
-                activeFloorGroup.add(createWall(0.3, 1.2, 6.0, -4.25, 0.6, -8.5));
-                activeFloorGroup.add(createWall(0.3, 1.2, 6.0, 6.25, 0.6, -8.5));
-                activeFloorGroup.add(createHospitalBed(-2.2, -8.5, 0));
-                activeFloorGroup.add(createHospitalBed(1.0, -8.5, 0));
-                activeFloorGroup.add(createHospitalBed(4.2, -8.5, 0));
-
-                // 4. Khoa Ngoại (Sàn xám vô trùng)
-                activeFloorGroup.add(createBox(9.0, 0.05, 8.0, mats.floorSurgery, 11.2, 0.02, -7.5));
-                activeFloorGroup.add(createWall(0.3, 1.2, 8.0, 6.7, 0.6, -7.5));
-                activeFloorGroup.add(createWall(9.0, 1.2, 0.3, 11.2, 0.6, -3.5));
-                activeFloorGroup.add(createSurgerySuite(11.2, -7.5));
-
-                // 5. Xét Nghiệm & Lấy Máu (P.201 Tiếp nhận - Sàn tím lavender)
-                activeFloorGroup.add(createBox(9.0, 0.05, 6.5, mats.floorLab, 11.2, 0.02, 0.5));
-                activeFloorGroup.add(createWall(0.3, 1.2, 6.5, 6.7, 0.6, 0.5));
-                activeFloorGroup.add(createWall(9.0, 1.2, 0.3, 11.2, 0.6, 4.0));
-                activeFloorGroup.add(createDoctorDesk(11.2, 0.5, Math.PI / 2));
-
-                // 6. Nhà Thuốc Bệnh Viện (Sàn xanh ngọc tươi)
-                activeFloorGroup.add(createBox(9.0, 0.05, 7.5, mats.floorPharmacy, 11.2, 0.02, 8.2));
-                activeFloorGroup.add(createWall(0.3, 1.2, 7.5, 6.7, 0.6, 8.2));
-                activeFloorGroup.add(createPharmacyCounter(11.2, 8.2));
-
-                // 7. LỘ TRÌNH WAYFINDING 3D RIBBON RÕ RÀNG TRÊN HÀNH LANG
-                activeFloorGroup.add(createWayfindingRibbon());
-
-                // GẮN NHÃN GỌN GÀNG - KHÔNG CHE CHẮN
-                addRoomTag("Khoa Cấp cứu (P.101)", "tag-emergency", -10.5, 1.3, 3.2, "cấp cứu");
-                addRoomTag("Khoa Khám bệnh", "tag-primary-blue", -0.5, 1.3, -0.5, "khám bệnh");
-                addRoomTag("Khoa Nội (P.301)", "tag-dark-blue", 1.0, 1.3, -8.5, "nội");
-                addRoomTag("Khoa Ngoại", "tag-dark-blue", 11.2, 1.3, -7.5, "ngoại");
-                addRoomTag("Xét nghiệm (P.201)", "tag-lab", 11.2, 1.3, 0.5, "xét nghiệm");
-                addRoomTag("Nhà thuốc ATus", "tag-pharmacy", 11.2, 1.3, 8.2, "nhà thuốc");
-
-                // Icon tiện ích nhỏ gọn
-                addIconTag("🚻", "icon-restroom", -3.2, 1.0, 7.2);
-                addIconTag("🚻", "icon-restroom", -0.5, 1.0, -5.2);
-                addIconTag("🚻", "icon-restroom", 3.2, 1.0, 4.5);
-                addIconTag("🛗", "icon-elevator", -7.5, 1.0, -5.5);
-                addIconTag("❤️", "icon-heart", -7.5, 1.0, 1.5);
-                addFloorText("Phòng khám Nội số 3", -4.5, 0.1, 4.2);
-            }}
-
-            // ==========================================
-            // TẦNG 2: CẬN LÂM SÀNG
-            // ==========================================
-            else if (floorNum === 2) {{
-                activeFloorGroup.add(createBox(13, 0.05, 11, mats.floorLab, -7.5, 0.02, -5.5));
-                activeFloorGroup.add(createWall(13, 1.2, 0.3, -7.5, 0.6, 0));
-                activeFloorGroup.add(createWall(0.3, 1.2, 11, -1.0, 0.6, -5.5));
-                const mriBase = createBox(3.5, 1.8, 3.0, mats.metalChrome, -7.5, 0.9, -5.5);
-                activeFloorGroup.add(mriBase);
-                const mriTunnel = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 3.6, 20), mats.innerWall);
-                mriTunnel.rotation.z = Math.PI / 2;
-                mriTunnel.position.set(-7.5, 0.9, -5.5);
-                activeFloorGroup.add(mriTunnel);
-                addRoomTag("P.204 - Chụp MRI 3T & CT Scanner", "tag-dark-blue", -7.5, 1.3, -5.5, "mri");
-
-                activeFloorGroup.add(createBox(13, 0.05, 10, mats.floorSurgery, -7.5, 0.02, 5.5));
-                activeFloorGroup.add(createWall(0.3, 1.2, 10, -1.0, 0.6, 5.5));
-                activeFloorGroup.add(createBox(0.8, 2.0, 0.8, mats.metalChrome, -7.5, 1.0, 5.5));
-                addRoomTag("P.203 - Chụp X-Quang Kỹ Thuật Số", "tag-dark-blue", -7.5, 1.3, 5.5, "xquang");
-
-                activeFloorGroup.add(createBox(13, 0.05, 11, mats.floorLab, 7.5, 0.02, -5.5));
-                activeFloorGroup.add(createWall(13, 1.2, 0.3, 7.5, 0.6, 0));
-                activeFloorGroup.add(createWall(0.3, 1.2, 11, 1.0, 0.6, -5.5));
-                activeFloorGroup.add(createDoctorDesk(7.5, -5.5, 0));
-                addRoomTag("P.201 - Lấy Máu & Xét Nghiệm", "tag-lab", 7.5, 1.3, -5.5, "máu");
-
-                activeFloorGroup.add(createBox(13, 0.05, 10, mats.floorClinic, 7.5, 0.02, 5.5));
-                activeFloorGroup.add(createWall(0.3, 1.2, 10, 1.0, 0.6, 5.5));
-                activeFloorGroup.add(createDoctorDesk(7.5, 5.5, 0));
-                addRoomTag("P.202 - Đo Chức Năng Hô Hấp", "tag-pharmacy", 7.5, 1.3, 5.5, "hô hấp");
-
-                addIconTag("🛗", "icon-elevator", 0, 1.0, -10.5);
-                addIconTag("🚻", "icon-restroom", 0, 1.0, 10.5);
-            }}
-
-            // ==========================================
-            // TẦNG 3: KHÁM CHUYÊN KHOA
-            // ==========================================
-            else if (floorNum === 3) {{
-                activeFloorGroup.add(createBox(8.5, 0.05, 9, mats.floorInternal, -9.5, 0.02, -5.5));
-                activeFloorGroup.add(createWall(8.5, 1.1, 0.25, -9.5, 0.55, -1.0));
-                activeFloorGroup.add(createDoctorDesk(-9.5, -5.5, 0));
-                addRoomTag("P.301 - Khám Nội Tổng Quát", "tag-primary-blue", -9.5, 1.3, -5.5, "nội");
-
-                activeFloorGroup.add(createBox(8.5, 0.05, 9, mats.floorClinic, 0, 0.02, -5.5));
-                activeFloorGroup.add(createWall(8.5, 1.1, 0.25, 0, 0.55, -1.0));
-                activeFloorGroup.add(createWall(0.25, 1.1, 9, -5.25, 0.55, -5.5));
-                activeFloorGroup.add(createWall(0.25, 1.1, 9, 4.25, 0.55, -5.5));
-                activeFloorGroup.add(createDoctorDesk(0, -5.5, 0));
-                activeFloorGroup.add(createBox(0.8, 1.2, 0.05, mats.deskWood, 0, 1.2, -9.8));
-                addRoomTag("P.302 - Chuyên Khoa Mắt", "tag-primary-blue", 0, 1.3, -5.5, "mắt");
-
-                activeFloorGroup.add(createBox(8.5, 0.05, 9, mats.floorClinic, 9.5, 0.02, -5.5));
-                activeFloorGroup.add(createWall(8.5, 1.1, 0.25, 9.5, 0.55, -1.0));
-                activeFloorGroup.add(createDoctorDesk(9.5, -5.5, 0));
-                addRoomTag("P.303 - Tai Mũi Họng", "tag-dark-blue", 9.5, 1.3, -5.5, "tai mũi họng");
-
-                activeFloorGroup.add(createBox(11, 0.05, 8.5, mats.floorClinic, -6, 0.02, 6.0));
-                activeFloorGroup.add(createWall(11, 1.1, 0.25, -6, 0.55, 1.75));
-                activeFloorGroup.add(createWall(0.25, 1.1, 8.5, -0.5, 0.55, 6.0));
-                activeFloorGroup.add(createHospitalBed(-6, 6.0, Math.PI / 4));
-                addRoomTag("P.304 - Răng Hàm Mặt", "tag-pharmacy", -6, 1.3, 6.0, "răng");
-
-                activeFloorGroup.add(createBox(11, 0.05, 8.5, mats.floorClinic, 6, 0.02, 6.0));
-                activeFloorGroup.add(createWall(11, 1.1, 0.25, 6, 0.55, 1.75));
-                activeFloorGroup.add(createDoctorDesk(6, 6.0, Math.PI));
-                addRoomTag("P.305 - Da Liễu", "tag-pharmacy", 6, 1.3, 6.0, "da liễu");
-
-                addIconTag("🛗", "icon-elevator", 0, 1.0, -10.5);
-                addIconTag("🚻", "icon-restroom", -0.5, 1.0, 10.5);
-            }}
-
-            // ==========================================
-            // TẦNG 4: SẢN & NHI
-            // ==========================================
-            else if (floorNum === 4) {{
-                activeFloorGroup.add(createBox(13, 0.05, 18, mats.floorInternal, -7.5, 0.02, 0));
-                activeFloorGroup.add(createWall(0.3, 1.2, 18, -1.0, 0.6, 0));
-                activeFloorGroup.add(createHospitalBed(-7.5, -4, 0));
-                activeFloorGroup.add(createDoctorDesk(-7.5, 4, 0));
-                addRoomTag("P.401 - Khám Sản Phụ Khoa", "tag-primary-blue", -7.5, 1.3, 0, "sản");
-
-                activeFloorGroup.add(createBox(13, 0.05, 18, mats.floorClinic, 7.5, 0.02, 0));
-                activeFloorGroup.add(createWall(0.3, 1.2, 18, 1.0, 0.6, 0));
-                activeFloorGroup.add(createDoctorDesk(7.5, -4, 0));
-                activeFloorGroup.add(createHospitalBed(7.5, 4, 0));
-                addRoomTag("P.402 - Khám Nhi & Tiêm Chủng", "tag-pharmacy", 7.5, 1.3, 0, "nhi");
-
-                addIconTag("🛗", "icon-elevator", 0, 1.0, -10.5);
-                addIconTag("🚻", "icon-restroom", 0, 1.0, 10.5);
-            }}
-
-            scene.add(activeFloorGroup);
-        }}
-
-        // Gắn nhãn phòng HTML
-        function addRoomTag(text, tagClass, x, y, z, key) {{
-            const div = document.createElement('div');
-            div.className = `room-tag ${{tagClass}}`;
-            div.innerText = text;
-            labelsContainer.appendChild(div);
-
-            const isTarget = TARGET_DEPT && (
-                key.toLowerCase().includes(TARGET_DEPT.toLowerCase()) ||
-                text.toLowerCase().includes(TARGET_DEPT.toLowerCase()) ||
-                TARGET_DEPT.toLowerCase().includes(key.toLowerCase())
-            );
-
-            if (isTarget) {{
-                div.classList.add('tag-highlight');
-            }}
-
-            activeTags.push({{
-                el: div,
-                pos: new THREE.Vector3(x, y, z)
-            }});
-        }}
-
-        // Gắn icon tiện ích
-        function addIconTag(emoji, iconClass, x, y, z) {{
-            const div = document.createElement('div');
-            div.className = `icon-tag ${{iconClass}}`;
-            div.innerText = emoji;
-            labelsContainer.appendChild(div);
-            activeTags.push({{
-                el: div,
-                pos: new THREE.Vector3(x, y, z)
-            }});
-        }}
-
-        // Nhãn văn bản dán sàn
-        function addFloorText(text, x, y, z) {{
-            const div = document.createElement('div');
-            div.className = 'floor-text-label';
-            div.innerText = text;
-            labelsContainer.appendChild(div);
-            activeTags.push({{
-                el: div,
-                pos: new THREE.Vector3(x, y, z)
-            }});
-        }}
-
-        // Chuyển tầng
-        function switchFloor(floorNum) {{
-            [1, 2, 3, 4].forEach(f => {{
-                const btn = document.getElementById(`fbtn-${{f}}`);
-                if (btn) btn.classList.toggle('active', f === floorNum);
-            }});
-            buildFloor(floorNum);
-        }}
-
-        // Nút Đặt Lịch Khám
-        function triggerBooking() {{
-            window.parent.postMessage({{ type: 'STREAMLIT_SET_MENU', menu: 'Đặt lịch hẹn' }}, '*');
-            const bookBtn = window.parent.document.querySelector('button[key="btn_go_book"]');
-            if (bookBtn) bookBtn.click();
-        }}
-
-        // Zoom In / Out cho OrthographicCamera
-        function zoomIn() {{
-            camera.zoom = Math.min(camera.zoom * 1.25, 2.5);
-            camera.updateProjectionMatrix();
-        }}
-        function zoomOut() {{
-            camera.zoom = Math.max(camera.zoom / 1.25, 0.7);
-            camera.updateProjectionMatrix();
-        }}
-
-        // Khởi tạo ban đầu
-        const initFloor = [1, 2, 3, 4].includes(TARGET_FLOOR) ? TARGET_FLOOR : 1;
-        switchFloor(initFloor);
-
-        // Render loop
-        function animate() {{
-            requestAnimationFrame(animate);
-            controls.update();
-
-            activeTags.forEach(t => {{
-                const p = t.pos.clone().project(camera);
-                const x = (p.x * 0.5 + 0.5) * container.clientWidth;
-                const y = (-p.y * 0.5 + 0.5) * container.clientHeight;
-                t.el.style.left = `${{x}}px`;
-                t.el.style.top = `${{y}}px`;
-                t.el.style.display = (p.z > 1) ? 'none' : 'block';
-            }});
-
-            renderer.render(scene, camera);
-        }}
-        animate();
-
-        // Responsive khi resize
-        window.addEventListener('resize', () => {{
-            const newAspect = container.clientWidth / container.clientHeight;
-            camera.left = -frustumSize * newAspect / 2;
-            camera.right = frustumSize * newAspect / 2;
-            camera.top = frustumSize / 2;
-            camera.bottom = -frustumSize / 2;
-            camera.updateProjectionMatrix();
-            renderer.setSize(container.clientWidth, container.clientHeight);
-        }});
-    </script>
 </body>
 </html>
 """

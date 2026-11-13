@@ -1,12 +1,10 @@
 """Giao diện Cổng Bệnh Nhân & Kiosk Tiếp Đón (AI Hospital Assistant & Map - Bệnh Viện ATus).
-Khắc phục triệt để 4 lỗi:
-1. Thanh taskbar/sidebar khi ẩn có nút mở lại (chevron) luôn hiển thị nổi bật ở góc trên trái, ấn là mở lại ngay.
-2. Cửa sổ AI Chatbot: Nút tròn nổi (Floating Action Button 💬) góc phải dưới màn hình.
-   - Bấm nút tròn -> Mở bung popup chat AI.
-   - Bấm nút thu nhỏ [_] hoặc [✕] -> Thu nhỏ lại thành nút tròn nổi.
-   - RAG + Triage tốc độ cao (0.5s), không bị treo/đứng máy, hỗ trợ Voice tiếng Việt.
-3. Tên bệnh viện hiển thị thống nhất chuẩn xác: BỆNH VIỆN ATUS (Bệnh Viện Đa Khoa Quốc Tế ATus).
-4. Menu taskbar bên trái hoạt động độc lập và đầy đủ: Trang chủ, Bản đồ 3D, Đặt lịch hẹn, Tư vấn AI, Lịch sử khám, Cài đặt.
+Thiết kế chính xác theo toàn bộ bộ mockup thiết kế UI/UX:
+1. "Bản đồ 3D": Mặt bằng Isometric Three.js, Đặt Lịch Khám Nhanh bên phải, AI Assistant góc phải dưới.
+2. "Đặt lịch hẹn": Bước 1 Chọn Chuyên khoa & Dịch vụ, Bước 2 Chọn Bác sĩ, Bước 3 Chọn Ngày & Giờ (Lưới slot Còn chỗ/Đầy), Mini Map & AI Assistant.
+3. "Tư vấn AI": Cột chat trực tuyến 24/7 với gợi ý câu hỏi, voice mic, nút điều hướng đặt lịch/xem bản đồ trong câu trả lời, Mini Map & Popup Đặt lịch nhanh AI.
+4. "Lịch sử khám": Lọc theo thời gian & trạng thái, timeline thẻ lịch sử khám, thẻ "Lượt khám sắp tới", Mini Map & AI Assistant.
+5. "Trang chủ": Dashboard tổng quan khoa khám, bác sĩ trực, các lối tắt tiện ích.
 """
 from __future__ import annotations
 
@@ -14,9 +12,12 @@ import streamlit as st
 import streamlit.components.v1 as components
 from datetime import date, datetime
 import pandas as pd
+import json
 
 import queue_service
 import db
+import patient_service
+import ticket_service
 from assistant import answer
 from atus_hospital_3d_real import get_hospital_3d_html
 from sms_service import send_appointment_sms
@@ -30,19 +31,19 @@ st.set_page_config(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TÙY BIẾN CSS CHUẨN DESIGN MOCKUP & FIX LỖI SIDEBAR + FLOATING CHAT
+# TÙY BIẾN CSS TOÀN DIỆN CHUẨN MOCKUP DESIGN
 # ═══════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-    /* 1. ĐẢM BẢO NÚT MỞ SIDEBAR LUÔN HIỂN THỊ KHI SIDEBAR BỊ ẨN */
+    /* 1. NÚT MỞ SIDEBAR LUÔN HIỂN THỊ KHI SIDEBAR BỊ ẨN */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
         z-index: 9999999 !important;
         position: fixed !important;
-        top: 10px !important;
-        left: 10px !important;
+        top: 12px !important;
+        left: 12px !important;
     }
     [data-testid="stSidebarCollapsedControl"] button {
         background: #003a70 !important;
@@ -54,7 +55,7 @@ st.markdown("""
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        box-shadow: 0 4px 12px rgba(0, 58, 112, 0.4) !important;
+        box-shadow: 0 4px 12px rgba(0, 58, 112, 0.35) !important;
         cursor: pointer !important;
         transition: all 0.2s ease !important;
     }
@@ -77,15 +78,15 @@ st.markdown("""
     }
 
     .main .block-container {
-        padding-top: 0.6rem !important;
+        padding-top: 0.5rem !important;
         padding-bottom: 2rem !important;
         padding-left: 1.2rem !important;
         padding-right: 1.2rem !important;
         max-width: 100% !important;
-        background-color: #f8fafc;
+        background-color: #f6f9fa;
     }
     
-    /* 2. Thanh Sidebar bên trái (Màu xanh navy đậm #003a70) */
+    /* 2. Thanh Sidebar bên trái (#003a70 Navy) */
     section[data-testid="stSidebar"] {
         background-color: #003a70 !important;
         min-width: 250px !important;
@@ -100,7 +101,7 @@ st.markdown("""
         margin-bottom: 15px;
     }
     .brand-icon {
-        width: 42px; height: 42px; background: #ffffff;
+        width: 40px; height: 40px; background: #ffffff;
         border-radius: 50%; display: flex; align-items: center; justify-content: center;
         font-size: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
     }
@@ -108,7 +109,7 @@ st.markdown("""
         font-size: 1.05rem; font-weight: 800; line-height: 1.2; letter-spacing: 0.5px;
     }
 
-    /* Menu Sidebar dạng button radio tinh tế */
+    /* Menu Sidebar */
     div[data-testid="stSidebar"] .stRadio > div {
         gap: 6px;
     }
@@ -130,7 +131,7 @@ st.markdown("""
         box-shadow: 0 2px 6px rgba(0,0,0,0.2) !important;
     }
 
-    /* 3. Top Navbar Bar (Tìm kiếm, chuông báo, Avatar) */
+    /* 3. Top Navbar Bar */
     .top-navbar {
         display: flex; justify-content: space-between; align-items: center;
         background: #ffffff; padding: 8px 18px; border-radius: 12px;
@@ -151,48 +152,171 @@ st.markdown("""
         font-weight: 700; font-size: 0.85rem;
     }
 
-    /* 4. Thẻ Bản Đồ 3D */
-    .map-header {
+    /* Tiêu đề & Nút đặt lịch ở góc trên */
+    .page-title-row {
         display: flex; justify-content: space-between; align-items: center;
-        margin-bottom: 8px;
+        margin-bottom: 12px;
     }
-    .map-title {
-        font-size: 1.25rem; font-weight: 800; color: #003a70; letter-spacing: 0.5px;
+    .page-title-text {
+        font-size: 1.25rem; font-weight: 800; color: #003a70; letter-spacing: 0.4px; margin: 0;
+    }
+    .page-subtitle-text {
+        font-size: 0.85rem; color: #64748b; margin-top: 2px;
     }
 
-    /* 5. Cột Đặt Lịch Khám Nhanh bên phải */
-    .booking-title-bar {
-        background: #008f88; color: #ffffff; padding: 10px 14px;
-        border-radius: 10px; font-weight: 700; font-size: 0.95rem; margin-bottom: 12px;
-        display: flex; justify-content: space-between; align-items: center;
+    /* Thẻ Chung (Cards) */
+    .white-card {
+        background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+        padding: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); margin-bottom: 12px;
     }
 
-    /* 6. Hộp Chat AI Assistant */
-    .ai-chat-header {
-        background: linear-gradient(135deg, #008f88 0%, #003a70 100%);
-        color: #ffffff; padding: 10px 14px;
-        border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center;
-        font-weight: 700; font-size: 0.92rem;
+    /* Khối Chọn Chuyên Khoa Dạng Card (Bước 1 Đặt Lịch) */
+    .dept-card {
+        background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px;
+        padding: 12px 10px; text-align: center; cursor: pointer; transition: all 0.2s ease;
     }
-    .bubble-ai {
-        background: #f1f5f9; padding: 9px 13px; border-radius: 12px 12px 12px 2px;
-        font-size: 0.85rem; color: #1e293b; margin-bottom: 8px; line-height: 1.45;
+    .dept-card:hover {
+        border-color: #008f88; background: #f0fdfa; transform: translateY(-2px);
+    }
+    .dept-card.active {
+        border-color: #008f88; background: #e6f7f6; box-shadow: 0 2px 8px rgba(0,143,136,0.15);
+    }
+    .dept-card-icon {
+        font-size: 26px; margin-bottom: 6px;
+    }
+    .dept-card-title {
+        font-size: 0.84rem; font-weight: 700; color: #0f172a; line-height: 1.2;
+    }
+
+    /* Khối Chọn Bác Sĩ (Bước 2 Đặt Lịch) */
+    .doctor-card {
+        background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px;
+        padding: 12px; display: flex; gap: 12px; align-items: center;
+        transition: all 0.2s ease; margin-bottom: 8px;
+    }
+    .doctor-card.active {
+        border-color: #008f88; background: #f0fdfa;
+    }
+    .doc-avatar {
+        width: 44px; height: 44px; border-radius: 50%; background: #e0f2fe;
+        display: flex; align-items: center; justify-content: center; font-size: 24px;
+    }
+
+    /* KHỐI ĐẶT LỊCH KHÁM NHANH CHUẨN MOCKUP (THIẾT KẾ CARD HIỆN ĐẠI) */
+    .quick-booking-box {
+        background: #ffffff;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 20px 22px;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+        margin-bottom: 16px;
+    }
+    .quick-booking-title {
+        font-size: 1.18rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: 14px;
+        letter-spacing: -0.3px;
+    }
+    .quick-section-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #64748b;
+        margin-bottom: 6px;
+        display: block;
+    }
+
+    /* Lưới Slot Lịch Khám (Bước 3) */
+    .slot-badge-green {
+        background: #ccfbf1; color: #0f766e; font-weight: 700; font-size: 0.75rem;
+        padding: 4px 8px; border-radius: 6px; text-align: center; display: inline-block;
+        border: 1px solid #99f6e4;
+    }
+    .slot-badge-gray {
+        background: #f1f5f9; color: #94a3b8; font-weight: 600; font-size: 0.75rem;
+        padding: 4px 8px; border-radius: 6px; text-align: center; display: inline-block;
         border: 1px solid #e2e8f0;
     }
-    .bubble-user {
-        background: #008f88; color: #ffffff; padding: 9px 13px; border-radius: 12px 12px 2px 12px;
-        font-size: 0.85rem; margin-bottom: 8px; margin-left: 20px; line-height: 1.45; text-align: right;
+
+    /* Khung Chat AI Assistant (Mockup Stream) */
+    .chat-bubble-row {
+        display: flex; gap: 10px; margin-bottom: 12px; align-items: flex-start;
+    }
+    .chat-bubble-avatar {
+        width: 34px; height: 34px; border-radius: 50%; display: flex;
+        align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+    }
+    .chat-bubble-content {
+        background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px;
+        padding: 10px 14px; font-size: 0.88rem; line-height: 1.45; color: #1e293b;
+        max-width: 82%;
+    }
+    .chat-bubble-user-content {
+        background: #008f88; color: #ffffff; border-radius: 14px;
+        padding: 10px 14px; font-size: 0.88rem; line-height: 1.45; margin-left: auto;
+        max-width: 82%;
     }
 
-    /* Card Trang chủ */
-    .home-stat-card {
-        background: #ffffff; border-radius: 12px; padding: 18px;
-        border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        transition: transform 0.2s;
+    /* Floating Action Button (FAB) AI Assistant nổi góc phải dưới */
+    div[data-testid="stPopover"] {
+        position: fixed !important;
+        bottom: 22px !important;
+        right: 26px !important;
+        z-index: 9999999 !important;
     }
-    .home-stat-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 16px rgba(0, 143, 136, 0.12);
+    div[data-testid="stPopover"] > button {
+        background: linear-gradient(135deg, #008f88 0%, #003a70 100%) !important;
+        color: #ffffff !important;
+        border-radius: 999px !important;
+        padding: 10px 20px !important;
+        font-weight: 700 !important;
+        font-size: 0.92rem !important;
+        box-shadow: 0 6px 22px rgba(0, 58, 112, 0.42) !important;
+        border: 2px solid #ffffff !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        transition: all 0.25s ease !important;
+        cursor: pointer !important;
+    }
+    div[data-testid="stPopover"] > button:hover {
+        transform: translateY(-2px) scale(1.04) !important;
+        box-shadow: 0 8px 28px rgba(0, 143, 136, 0.55) !important;
+    }
+    div[data-testid="stPopoverBody"] {
+        width: 400px !important;
+        max-width: 92vw !important;
+        max-height: 560px !important;
+        border-radius: 16px !important;
+        box-shadow: 0 16px 42px rgba(0,0,0,0.28) !important;
+        border: 2px solid #008f88 !important;
+        padding: 16px !important;
+        background: #ffffff !important;
+    }
+
+    /* Card Mini Map góc trên bên phải */
+    .minimap-card {
+        background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+        padding: 10px; margin-bottom: 12px; position: relative;
+    }
+    .minimap-top-btn {
+        position: absolute; top: 14px; right: 14px; z-index: 10;
+        background: #008f88; color: #ffffff; font-size: 0.75rem; font-weight: 700;
+        padding: 3px 10px; border-radius: 6px; border: none; cursor: pointer;
+    }
+
+    /* Lịch sử khám: Thẻ Timeline */
+    .history-card {
+        background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+        padding: 14px; margin-bottom: 12px; position: relative;
+        transition: box-shadow 0.2s;
+    }
+    .history-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    }
+    .badge-status-done {
+        background: #ecfdf5; color: #047857; font-size: 0.76rem; font-weight: 700;
+        padding: 2px 8px; border-radius: 6px; border: 1px solid #a7f3d0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -209,13 +333,29 @@ if "target_dept" not in st.session_state:
 if "current_guidance" not in st.session_state:
     st.session_state.current_guidance = None
 if "chat_open" not in st.session_state:
-    st.session_state.chat_open = False  # Mặc định dạng hình tròn nổi
+    st.session_state.chat_open = False
 if "last_ticket" not in st.session_state:
     st.session_state.last_ticket = None
+if "lang" not in st.session_state:
+    st.session_state.lang = "vi"
+if "patient_mpi_found" not in st.session_state:
+    st.session_state.patient_mpi_found = None
+if "patient_name_val" not in st.session_state:
+    st.session_state.patient_name_val = "Nguyễn Văn A"
+if "patient_phone_val" not in st.session_state:
+    st.session_state.patient_phone_val = "0912 345 678"
+if "patient_cccd_val" not in st.session_state:
+    st.session_state.patient_cccd_val = ""
 if "active_menu" not in st.session_state:
     st.session_state.active_menu = "Bản đồ 3D"
+if "selected_booking_dept" not in st.session_state:
+    st.session_state.selected_booking_dept = "Khoa Nội tổng quát"
+if "selected_booking_doc" not in st.session_state:
+    st.session_state.selected_booking_doc = "PGS.TS. Nguyễn Văn A"
+if "selected_booking_slot" not in st.session_state:
+    st.session_state.selected_booking_slot = "08:00"
 
-# Lấy danh sách các phòng khám lâm sàng từ Database
+# Lấy danh sách phòng khám từ Database
 try:
     clinic_rooms = queue_service.get_all_rooms(room_type="clinic")
 except Exception:
@@ -241,7 +381,6 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # Menu điều hướng hoạt động thực tế
     menu_options = [
         "🏠  Trang chủ",
         "🗺️  Bản đồ 3D",
@@ -250,7 +389,6 @@ with st.sidebar:
         "🕒  Lịch sử khám",
         "⚙️  Cài đặt"
     ]
-    # Lấy vị trí đang chọn
     default_m_idx = 1
     for i, opt in enumerate(menu_options):
         if st.session_state.active_menu in opt:
@@ -264,13 +402,10 @@ with st.sidebar:
         label_visibility="collapsed"
     )
     
-    # Cập nhật menu được chọn
     for key_name in ["Trang chủ", "Bản đồ 3D", "Đặt lịch hẹn", "Tư vấn AI", "Lịch sử khám", "Cài đặt"]:
         if key_name in selected_menu_item:
             if key_name != st.session_state.active_menu:
                 st.session_state.active_menu = key_name
-                if key_name == "Tư vấn AI":
-                    st.session_state.chat_open = True
                 st.rerun()
             break
 
@@ -283,28 +418,727 @@ with st.sidebar:
     """)
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TOP NAVBAR: TÌM KIẾM & THÔNG TIN HỒ SƠ
+# TOP NAVBAR: TÌM KIẾM, ĐỔI NGÔN NGỮ & RESET KIOSK (PHASE 2)
 # ═══════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <div class="top-navbar">
-    <div class="search-box">
-        🔍 <span>Tìm kiếm khoa, phòng khám, bác sĩ tại Bệnh Viện ATus...</span>
+    <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-weight:800;color:#003a70;font-size:1.05rem;">🏥 KIOSK TIẾP ĐÓN THÔNG MINH</span>
+        <span style="background:#ecfdf5;color:#059669;font-size:0.75rem;font-weight:700;padding:2px 8px;border-radius:12px;border:1px solid #a7f3d0;">● Trực tuyến 24/7</span>
     </div>
     <div class="user-profile">
         <span style="font-size:1.15rem;cursor:pointer;" title="Thông báo hệ thống">🔔</span>
         <div class="avatar-circle">AT</div>
-        <span style="font-size:0.85rem;font-weight:600;color:#334155;">Bệnh nhân</span>
+        <span style="font-size:0.85rem;font-weight:600;color:#334155;">
+            """ + (f"Bệnh nhân: {st.session_state.patient_mpi_found}" if st.session_state.patient_mpi_found else "Kiosk Khách (Chưa định danh)") + """
+        </span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
+col_nb1, col_nb2, col_nb3 = st.columns([55, 25, 20])
+with col_nb1:
+    search_q = st.text_input("🔍 Tìm kiếm", placeholder="🔍 Tìm kiếm chuyên khoa, phòng khám, bác sĩ...", label_visibility="collapsed")
+    if search_q.strip() and search_q.strip() != st.session_state.target_dept:
+        st.session_state.target_dept = search_q.strip()
+with col_nb2:
+    lang_opts = ["🇻🇳 Tiếng Việt (vi-VN)", "🇬🇧 English (en-US)"]
+    cur_lang_idx = 0 if st.session_state.lang == "vi" else 1
+    sel_lang = st.selectbox("Ngôn ngữ Kiosk", options=lang_opts, index=cur_lang_idx, label_visibility="collapsed")
+    new_lang = "vi" if "Tiếng Việt" in sel_lang else "en"
+    if new_lang != st.session_state.lang:
+        st.session_state.lang = new_lang
+        st.rerun()
+with col_nb3:
+    if st.button("🔄 Reset Kiosk", use_container_width=True, help="Xóa thông tin phiên làm việc hiện tại để bảo vệ quyền riêng tư người bệnh"):
+        st.session_state.last_ticket = None
+        st.session_state.patient_mpi_found = None
+        st.session_state.patient_name_val = ""
+        st.session_state.patient_phone_val = ""
+        st.session_state.patient_cccd_val = ""
+        st.session_state.target_dept = ""
+        st.session_state.messages = []
+        st.rerun()
+
+# Client-side Inactivity Timeout (Tự động tải lại màn hình sau 45s không thao tác)
+components.html("""
+<script>
+let lastActive = Date.now();
+const TIMEOUT_MS = 45000; // 45 giây không thao tác
+
+function recordActivity() {
+    lastActive = Date.now();
+}
+window.addEventListener('mousemove', recordActivity, true);
+window.addEventListener('keydown', recordActivity, true);
+window.addEventListener('touchstart', recordActivity, true);
+window.addEventListener('click', recordActivity, true);
+
+setInterval(() => {
+    if (Date.now() - lastActive > TIMEOUT_MS) {
+        lastActive = Date.now();
+        window.parent.location.reload();
+    }
+}, 4000);
+</script>
+""", height=0)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
-# XỬ LÝ THEO MENU ĐƯỢC CHỌN (TẤT CẢ MENU HOẠT ĐỘNG HOÀN TOÀN)
+# TRANG 1: BẢN ĐỒ 3D (CHÍNH XÁC MOCKUP 1)
 # ═══════════════════════════════════════════════════════════════════════════
+if st.session_state.active_menu == "Bản đồ 3D":
+    st.markdown("""
+    <div class="page-title-row">
+        <div>
+            <h2 class="page-title-text">BẢN ĐỒ BỆNH VIỆN 3D</h2>
+            <div class="page-subtitle-text">Mặt bằng trực quan Three.js Isometric - Tầng 1, 2, 3</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# 1. MENU: TRANG CHỦ ────────────────────────────────────────────────────────
-if st.session_state.active_menu == "Trang chủ":
+    c_map, c_side = st.columns([73, 27], gap="medium")
+
+    with c_map:
+        if st.session_state.current_guidance:
+            g = st.session_state.current_guidance
+            st.info(f"📍 **Chỉ dẫn AI:** {g.get('room_name')} (Tầng {g.get('floor')}) — {g.get('instructions')}")
+
+        html_3d = get_hospital_3d_html(
+            target_floor=st.session_state.target_floor,
+            target_dept=st.session_state.target_dept,
+            mode="full"
+        )
+        components.html(html_3d, height=680)
+
+    with c_side:
+        # THÔNG TIN KHOA PHÒNG & CHỈ DẪN LỐI ĐI (LOẠI BỎ FORM TRÙNG LẶP)
+        st.markdown("""
+        <div style="background:#003a70;color:#ffffff;padding:10px 14px;border-radius:10px 10px 0 0;font-weight:700;font-size:0.95rem;display:flex;align-items:center;gap:8px;">
+            <span>📍</span> <span>Thông Tin Khoa / Phòng Khám</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.container():
+            st.markdown("""<div class="white-card" style="border-top:none;border-radius:0 0 10px 10px;margin-bottom:12px;">""", unsafe_allow_html=True)
+            
+            # Chọn khoa để định vị trên bản đồ 3D
+            dept_opts = [r["name"] for r in clinic_rooms]
+            cur_idx = 0
+            if st.session_state.target_dept:
+                for i, d in enumerate(dept_opts):
+                    if st.session_state.target_dept.lower() in d.lower() or d.lower() in st.session_state.target_dept.lower():
+                        cur_idx = i
+                        break
+
+            sel_dept_nav = st.selectbox("Chọn khoa để xem vị trí:", options=dept_opts, index=cur_idx, key="sel_dept_nav_map")
+
+            selected_room_info = clinic_rooms[cur_idx]
+            for r in clinic_rooms:
+                if r["name"] == sel_dept_nav:
+                    selected_room_info = r
+                    break
+
+            if selected_room_info["name"] != st.session_state.target_dept:
+                st.session_state.target_dept = selected_room_info["name"]
+                st.session_state.target_floor = selected_room_info.get("floor", 1)
+                st.rerun()
+
+            r_code = selected_room_info.get("room_number", "P.101")
+            r_floor = selected_room_info.get("floor", 1)
+            is_er = "cấp cứu" in selected_room_info["name"].lower()
+            
+            st.markdown(f"""
+            <div style="padding:12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;margin:10px 0;">
+                <div style="font-weight:800;color:#003a70;font-size:1.05rem;margin-bottom:4px;">{selected_room_info['name']}</div>
+                <div style="font-size:0.85rem;color:#64748b;margin-bottom:8px;">
+                    Mã phòng: <b style="color:#0f172a;">{r_code}</b> · Vị trí: <b style="color:#008f88;">Tầng {r_floor}</b>
+                </div>
+                <div style="font-size:0.82rem;color:#334155;margin-bottom:4px;">⏰ Thời gian tiếp nhận: <b>{"24/7 (Khẩn cấp)" if is_er else "07:00 – 17:00"}</b></div>
+                <div style="font-size:0.82rem;color:#334155;">👨‍⚕️ Bác sĩ trực: <b>{"BS. Ngayh Huyền (Cấp Cứu)" if is_er else "ThS. BS. Nguyễn Tấn"}</b></div>
+            </div>
+            <div style="background:#f0fdfa;border:1px dashed #008f88;border-radius:8px;padding:9px 12px;font-size:0.82rem;color:#0f766e;margin-bottom:12px;">
+                🧭 <b>Chỉ dẫn di chuyển:</b> {"Lối đi riêng xe cứu thương bên cánh trái sảnh chính." if is_er else f"Đi thang máy trung tâm lên Tầng {r_floor}, theo dải màu dẫn đường đến phòng {r_code}."}
+            </div>
+            """, unsafe_allow_html=True)
+
+            if not is_er:
+                if st.button("📅 Đặt Lịch Hẹn Tại Khoa Này", use_container_width=True, type="primary", key="btn_switch_to_booking_from_map"):
+                    st.session_state.active_menu = "Đặt lịch hẹn"
+                    st.session_state.selected_booking_dept = selected_room_info["name"]
+                    st.rerun()
+            else:
+                st.error("🚨 Khoa Cấp Cứu tiếp nhận trực tiếp 24/7 không cần đặt hẹn. Vui lòng di chuyển ngay đến cửa cấp cứu.")
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            # Lối tắt chuyển tầng & khu vực nhanh
+            st.markdown("""
+            <div class="white-card">
+                <b style="font-size:0.86rem;color:#003a70;display:block;margin-bottom:8px;">Lối tắt khu vực trọng yếu:</b>
+            """, unsafe_allow_html=True)
+            k1, k2 = st.columns(2)
+            with k1:
+                if st.button("🚨 Cấp Cứu 24/7", use_container_width=True, key="btn_quick_er"):
+                    st.session_state.target_floor = 1
+                    st.session_state.target_dept = "Khoa Cấp Cứu 24/7"
+                    st.rerun()
+            with k2:
+                if st.button("💊 Nhà Thuốc", use_container_width=True, key="btn_quick_pharm"):
+                    st.session_state.target_floor = 1
+                    st.session_state.target_dept = "Nhà thuốc bệnh viện"
+                    st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TRANG 2: ĐẶT LỊCH HẸN KHÁM BỆNH (CHÍNH XÁC MOCKUP THIẾT KẾ)
+# ═══════════════════════════════════════════════════════════════════════════
+elif st.session_state.active_menu == "Đặt lịch hẹn":
+    st.markdown("""
+    <div class="page-title-row">
+        <div>
+            <h2 class="page-title-text">ĐẶT LỊCH HẸN KHÁM BỆNH</h2>
+            <div class="page-subtitle-text">Hệ thống chọn khoa, bác sĩ và khung giờ khám tự động chuẩn Kiosk ATus</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c_book, c_side = st.columns([46, 54], gap="large")
+
+    with c_book:
+        # THẺ "ĐẶT LỊCH KHÁM NHANH" (CHUẨN 100% THEO MOCKUP BÊN TRÁI)
+        st.markdown("""
+        <div class="quick-booking-box">
+            <div class="quick-booking-title">Đặt lịch khám nhanh</div>
+            <span class="quick-section-label">Chọn chuyên khoa</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # 1. CHỌN CHUYÊN KHOA (CHỈ CÁC CHUYÊN KHOA NGOẠI TRÚ - KHÔNG CÓ CẤP CỨU)
+        outpatient_depts = [
+            "Khoa Nội",
+            "Khoa Tim mạch",
+            "Khoa Nhi",
+            "Khoa Sản phụ khoa",
+            "Khoa Tai Mũi Họng",
+            "Khoa Răng Hàm Mặt",
+            "Khoa Mắt",
+            "Khoa Da liễu",
+            "Khoa Tiêu hóa - Gan mật",
+            "Khoa Hô hấp",
+            "Khoa Thần kinh",
+            "Khoa Cơ Xương Khớp"
+        ]
+        
+        cur_d_idx = 0
+        for i, d in enumerate(outpatient_depts):
+            if d.lower() in st.session_state.selected_booking_dept.lower() or st.session_state.selected_booking_dept.lower() in d.lower():
+                cur_d_idx = i
+                break
+
+        sel_dept = st.selectbox(
+            "Chọn chuyên khoa",
+            options=outpatient_depts,
+            index=cur_d_idx,
+            label_visibility="collapsed",
+            key="sel_quick_dept_box"
+        )
+        if sel_dept != st.session_state.selected_booking_dept:
+            st.session_state.selected_booking_dept = sel_dept
+            st.session_state.target_dept = sel_dept
+            st.rerun()
+
+        # 2. CHỌN BÁC SĨ (DẠNG THẺ CARD KÈM SỐ SAO ĐÁNH GIÁ)
+        st.markdown("<span class='quick-section-label' style='margin-top:12px;'>Chọn bác sĩ</span>", unsafe_allow_html=True)
+        
+        # Danh sách bác sĩ theo chuyên khoa (chuẩn mockup)
+        if "tim" in sel_dept.lower():
+            dept_docs = [
+                {"name": "BS. Nguyễn Tấn", "stars": "★★★★★", "rating": 5},
+                {"name": "BS. Ngô Huyền", "stars": "★★★★☆", "rating": 4}
+            ]
+        elif "nhi" in sel_dept.lower():
+            dept_docs = [
+                {"name": "BSCKI. Lê Thị Hương", "stars": "★★★★★", "rating": 5},
+                {"name": "BS. Ngô Minh Đức", "stars": "★★★★☆", "rating": 4}
+            ]
+        elif "mắt" in sel_dept.lower():
+            dept_docs = [
+                {"name": "BSCKI. Bùi Minh Châu", "stars": "★★★★★", "rating": 5},
+                {"name": "BS. Trần Thị Mắt", "stars": "★★★★☆", "rating": 4}
+            ]
+        else:
+            dept_docs = [
+                {"name": "BS. Nguyễn Tấn", "stars": "★★★★★", "rating": 5},
+                {"name": "BS. Ngô Huyền", "stars": "★★★★☆", "rating": 4}
+            ]
+
+        doc_names = [d["name"] for d in dept_docs]
+        if st.session_state.selected_booking_doc not in doc_names:
+            st.session_state.selected_booking_doc = doc_names[0]
+
+        for d in dept_docs:
+            is_doc_active = (st.session_state.selected_booking_doc == d["name"])
+            border_color = "#008f88" if is_doc_active else "#e2e8f0"
+            bg_color = "#f0fdfa" if is_doc_active else "#ffffff"
+            st.markdown(f"""
+            <div style="background:{bg_color};border:2px solid {border_color};border-radius:10px;padding:9px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s ease;">
+                <span style="font-weight:700;font-size:0.88rem;color:#0f172a;">{d['name']}</span>
+                <span style="color:#f59e0b;font-size:0.88rem;letter-spacing:2px;">{d['stars']}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"{'✔ Đang chọn' if is_doc_active else 'Chọn'} {d['name']}", key=f"btn_pick_doc_{d['name']}", use_container_width=True, type="primary" if is_doc_active else "secondary"):
+                st.session_state.selected_booking_doc = d["name"]
+                st.rerun()
+
+        # 3. CHỌN GIỜ (LƯỚI 9 NÚT BẤM 3x3 CHUẨN MOCKUP)
+        st.markdown("<span class='quick-section-label' style='margin-top:12px;'>Chọn giờ</span>", unsafe_allow_html=True)
+        time_slot_list = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "16:30", "17:00"]
+        
+        c_slot1, c_slot2, c_slot3 = st.columns(3)
+        cols_slot = [c_slot1, c_slot2, c_slot3]
+        for idx, slt in enumerate(time_slot_list):
+            with cols_slot[idx % 3]:
+                is_slt_active = (st.session_state.selected_booking_slot == slt)
+                if st.button(slt, key=f"quick_slt_{slt}", use_container_width=True, type="primary" if is_slt_active else "secondary"):
+                    st.session_state.selected_booking_slot = slt
+                    st.rerun()
+
+        # 4. THÔNG TIN BỆNH NHÂN (HỌ VÀ TÊN & SỐ ĐIỆN THOẠI)
+        st.markdown("<span class='quick-section-label' style='margin-top:14px;'>Thông tin bệnh nhân</span>", unsafe_allow_html=True)
+        q_patient_name = st.text_input("Họ và tên", value=st.session_state.patient_name_val, placeholder="Họ và tên", label_visibility="collapsed")
+        q_patient_phone = st.text_input("Số điện thoại", value=st.session_state.patient_phone_val, placeholder="Số điện thoại", label_visibility="collapsed")
+
+        # 5. NÚT XÁC NHẬN ĐẶT LỊCH (XANH TEAL #008f88)
+        st.write("")
+        btn_confirm_quick = st.button("Xác nhận đặt lịch", use_container_width=True, type="primary", key="btn_confirm_quick_appointment")
+
+        if btn_confirm_quick:
+            if not q_patient_name.strip() or not q_patient_phone.strip():
+                st.error("Vui lòng nhập đầy đủ Họ và tên và Số điện thoại liên hệ!")
+            else:
+                # Tìm phòng khám tương ứng trong database
+                target_room = clinic_rooms[0]
+                for r in clinic_rooms:
+                    if sel_dept.lower() in r["name"].lower() or r["name"].lower() in sel_dept.lower():
+                        target_room = r
+                        break
+                
+                try:
+                    tk = queue_service.issue_ticket(
+                        room_id=target_room["id"],
+                        patient_name=q_patient_name.strip(),
+                        patient_phone=q_patient_phone.strip(),
+                        cccd=st.session_state.patient_cccd_val or None,
+                        patient_notes=f"Khoa: {sel_dept} | Bác sĩ: {st.session_state.selected_booking_doc} | Giờ hẹn: {st.session_state.selected_booking_slot}",
+                        priority_level=0,
+                        force_emergency=False
+                    )
+                    st.session_state.last_ticket = tk
+                    st.session_state.patient_name_val = q_patient_name.strip()
+                    st.session_state.patient_phone_val = q_patient_phone.strip()
+                    st.rerun()
+                except Exception as ex:
+                    st.error(f"Lỗi đặt lịch: {ex}")
+
+    with c_side:
+        # BÊN PHẢI: PHIẾU KHÁM ĐIỆN TỬ (NẾU ĐÃ CẤP) HOẶC SƠ ĐỒ 3D PHÒNG KHÁM & TRA CỨU HỒ SƠ
+        if st.session_state.last_ticket:
+            t_id = st.session_state.last_ticket["ticket_id"]
+            t_info = ticket_service.get_ticket_info(t_id) or st.session_state.last_ticket
+
+            st.markdown(ticket_service.generate_ticket_html(t_info, lang=st.session_state.lang), unsafe_allow_html=True)
+            
+            # Xuất PDF in nhiệt 80mm
+            pdf_bytes = ticket_service.generate_ticket_pdf(t_info, lang=st.session_state.lang)
+            col_t1, col_t2 = st.columns(2)
+            with col_t1:
+                st.download_button(
+                    "📥 Tải PDF (In nhiệt 80mm)",
+                    data=pdf_bytes,
+                    file_name=f"PhieuKham_{t_info['ticket_number']}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary"
+                )
+            with col_t2:
+                if st.button("🗺️ Chỉ đường 3D", use_container_width=True, key="btn_go_map_after_quick_ticket"):
+                    st.session_state.active_menu = "Bản đồ 3D"
+                    st.session_state.target_floor = t_info["floor"]
+                    st.session_state.target_dept = t_info["room_name"]
+                    st.rerun()
+
+            st.write("")
+            st.info("⏳ **Kiosk Tiếp Đón:** Màn hình sẽ tự động làm mới sau 45s để đón người tiếp theo.")
+            if st.button("🔄 Đón Lượt Kế Tiếp (Reset Kiosk)", use_container_width=True, type="secondary", key="btn_reset_kiosk_quick"):
+                st.session_state.last_ticket = None
+                st.session_state.patient_mpi_found = None
+                st.session_state.patient_name_val = ""
+                st.session_state.patient_phone_val = ""
+                st.session_state.patient_cccd_val = ""
+                st.rerun()
+
+        else:
+            # Sơ đồ Mini 3D và Định vị phòng khám dự kiến
+            st.markdown("""
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <b style="font-size:0.88rem;color:#003a70;">📍 Vị trí phòng khám dự kiến trên bản đồ:</b>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            mini_map_html = get_hospital_3d_html(target_floor=2 if "tim" in st.session_state.selected_booking_dept.lower() else 1, target_dept=st.session_state.selected_booking_dept, mode="mini")
+            components.html(mini_map_html, height=220)
+            
+            if st.button("🔍 Xem bản đồ lớn 360°", use_container_width=True, key="btn_view_full_map_from_quick_book"):
+                st.session_state.active_menu = "Bản đồ 3D"
+                st.session_state.target_floor = 2 if "tim" in st.session_state.selected_booking_dept.lower() else 1
+                st.session_state.target_dept = st.session_state.selected_booking_dept
+                st.rerun()
+
+            # Khối Tra Cứu Hồ Sơ Bệnh Nhân (Patient Master Index - MPI)
+            st.markdown("""
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-top:14px;">
+                <b style="font-size:0.88rem;color:#003a70;display:block;margin-bottom:6px;">🔍 Tra cứu hồ sơ bệnh nhân cũ (MPI)</b>
+                <p style="font-size:0.8rem;color:#64748b;margin:0 0 8px 0;">Nhập số CCCD / Mã BHYT / SĐT để hệ thống tự động điền thông tin và liên kết lịch sử khám.</p>
+            """, unsafe_allow_html=True)
+            
+            c_mpi1, c_mpi2 = st.columns([72, 28])
+            with c_mpi1:
+                mpi_lookup_input = st.text_input("CCCD/BHYT/SĐT", value=st.session_state.patient_cccd_val, placeholder="Nhập CCCD hoặc SĐT...", label_visibility="collapsed")
+            with c_mpi2:
+                btn_find_mpi_act = st.button("Tìm hồ sơ", use_container_width=True, key="btn_quick_find_mpi")
+
+            if btn_find_mpi_act and mpi_lookup_input.strip():
+                st.session_state.patient_cccd_val = mpi_lookup_input.strip()
+                try:
+                    conn = db.get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute("""
+                        SELECT id, patient_code, full_name, phone, cccd, dob, gender
+                        FROM patients
+                        WHERE cccd = ? OR bhyt_code = ? OR phone = ?
+                    """, (mpi_lookup_input.strip(), mpi_lookup_input.strip(), mpi_lookup_input.strip()))
+                    p_row = cur.fetchone()
+                    conn.close()
+                    if p_row:
+                        st.session_state.patient_mpi_found = p_row[1]
+                        st.session_state.patient_name_val = p_row[2]
+                        st.session_state.patient_phone_val = p_row[3]
+                        st.success(f"✨ Tìm thấy: **{p_row[2]}** (Mã MPI: **{p_row[1]}**)")
+                        st.rerun()
+                    else:
+                        st.info("Chưa có hồ sơ cũ. Hệ thống sẽ tự động cấp Mã Bệnh Nhân Mới (MPI).")
+                except Exception as err:
+                    st.error(f"Lỗi tra cứu: {err}")
+
+            if st.session_state.patient_mpi_found:
+                st.markdown(f"<div style='font-size:0.82rem;color:#059669;font-weight:700;margin-top:6px;'>👤 Đã nhận diện hồ sơ: {st.session_state.patient_mpi_found}</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TRANG 3: TƯ VẤN SỨC KHỎE AI (CHÍNH XÁC MOCKUP 3)
+# ═══════════════════════════════════════════════════════════════════════════
+elif st.session_state.active_menu == "Tư vấn AI":
+    st.markdown("""
+    <div class="page-title-row">
+        <div>
+            <h2 class="page-title-text">TƯ VẤN SỨC KHỎE AI (AI HEALTH CONSULTANT)</h2>
+            <div class="page-subtitle-text">Trực tuyến & Sẵn sàng hỗ trợ 24/7 với mô hình Y tế Chuyên sâu</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c_chat, c_side = st.columns([68, 32], gap="medium")
+
+    with c_chat:
+        # Cửa sổ tin nhắn trò chuyện (Stream chat chuẩn mockup 3)
+        chat_container = st.container(height=360)
+        with chat_container:
+            # Lời chào ban đầu của AI (chuẩn mockup)
+            st.markdown("""
+            <div class="chat-bubble-row">
+                <div class="chat-bubble-avatar" style="background:#e0f2fe;">🤖</div>
+                <div class="chat-bubble-content">
+                    <b>Bác sĩ Trí tuệ Nhân tạo:</b><br>
+                    Chào bạn! Tôi là Bác sĩ Trí tuệ Nhân tạo của Bệnh Viện ATus. Bạn đang gặp vấn đề gì về sức khỏe hay cần tôi tư vấn điều gì không?
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if not st.session_state.messages:
+                # Mockup câu mẫu để khớp y hệt ảnh 3 nếu chưa chat
+                st.markdown("""
+                <div class="chat-bubble-row">
+                    <div class="chat-bubble-user-content">
+                        Tôi bị đau đầu, chóng mặt từ sáng nay, hơi sốt nhẹ.
+                    </div>
+                    <div class="chat-bubble-avatar" style="background:#008f88;color:#fff;">👤</div>
+                </div>
+                <div class="chat-bubble-row">
+                    <div class="chat-bubble-avatar" style="background:#e0f2fe;">🤖</div>
+                    <div class="chat-bubble-content">
+                        Dựa trên triệu chứng <b>đau đầu, chóng mặt và sốt nhẹ</b> của bạn, có thể bạn đang bị cảm cúm hoặc mệt mỏi do thay đổi thời tiết. Tuy nhiên, nếu có thêm các dấu hiệu như buồn nôn hay gáy cứng, bạn nên đi khám sớm. Tôi khuyến nghị bạn nên đặt lịch khám tại <b>Khoa Nội tổng quát</b> hoặc <b>Khoa Thần kinh</b> để được bác sĩ kiểm tra kỹ hơn.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                for m in st.session_state.messages:
+                    if m["role"] == "user":
+                        st.markdown(f"""
+                        <div class="chat-bubble-row">
+                            <div class="chat-bubble-user-content">{m['content']}</div>
+                            <div class="chat-bubble-avatar" style="background:#008f88;color:#fff;">👤</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div class="chat-bubble-row">
+                            <div class="chat-bubble-avatar" style="background:#e0f2fe;">🤖</div>
+                            <div class="chat-bubble-content">{m['content']}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+        # Nút hành động nhanh bên dưới câu trả lời của AI (khớp mockup)
+        st.write("")
+        c_act1, c_act2 = st.columns(2)
+        with c_act1:
+            if st.button("👉 Đặt lịch khám Khoa Nội", use_container_width=True, type="primary"):
+                st.session_state.active_menu = "Đặt lịch hẹn"
+                st.session_state.selected_booking_dept = "Khoa Nội tổng quát"
+                st.rerun()
+        with c_act2:
+            if st.button("🗺️ Xem vị trí phòng khám trên bản đồ", use_container_width=True):
+                st.session_state.active_menu = "Bản đồ 3D"
+                st.session_state.target_floor = 3
+                st.session_state.target_dept = "Khoa Nội Tổng Quát"
+                st.rerun()
+
+        # Gợi ý Câu hỏi (Chips)
+        st.markdown("<div style='font-size:0.84rem;font-weight:700;color:#003a70;margin:12px 0 6px 0;'>Gợi ý Câu hỏi</div>", unsafe_allow_html=True)
+        col_cp1, col_cp2, col_cp3, col_cp4 = st.columns(4)
+        quick_input = None
+        with col_cp1:
+            if st.button("Tôi bị đau dạ dày phải làm sao?", use_container_width=True, key="cp1"):
+                quick_input = "Tôi bị đau dạ dày phải làm sao?"
+        with col_cp2:
+            if st.button("Tư vấn chế độ ăn tiểu đường", use_container_width=True, key="cp2"):
+                quick_input = "Tư vấn chế độ ăn cho người tiểu đường"
+        with col_cp3:
+            if st.button("Chuẩn bị trước xét nghiệm máu", use_container_width=True, key="cp3"):
+                quick_input = "Cần chuẩn bị gì trước khi xét nghiệm máu?"
+        with col_cp4:
+            if st.button("Tác dụng phụ của thuốc", use_container_width=True, key="cp4"):
+                quick_input = "Hỏi về tác dụng phụ của thuốc"
+
+        # Thanh nhập tin nhắn kèm nút Voice và Nút Gửi
+        with st.form("form_chat_ai_consult", clear_on_submit=True):
+            c_inp, c_mic, c_send = st.columns([8, 1, 1])
+            with c_inp:
+                user_text = st.text_input("Chat Input", placeholder="Nhập triệu chứng hoặc câu hỏi của bạn tại đây...", label_visibility="collapsed")
+            with c_mic:
+                st.markdown("<div style='text-align:center;font-size:20px;padding-top:4px;' title='Nói tiếng Việt'>🎙️</div>", unsafe_allow_html=True)
+            with c_send:
+                btn_send = st.form_submit_button("🚀", use_container_width=True, type="primary")
+
+            if (btn_send and user_text.strip()) or quick_input:
+                final_q = quick_input if quick_input else user_text.strip()
+                st.session_state.messages.append({"role": "user", "content": final_q})
+                
+                with st.spinner("Bác sĩ AI đang phân tích dữ liệu chuyên khoa..."):
+                    try:
+                        reply = answer(final_q, history=st.session_state.messages[:-1])
+                        txt = reply.get("text", "")
+                        if not txt:
+                            txt = "Dạ, Bác sĩ AI ATus đã tiếp nhận thông tin. Vui lòng kiểm tra huyết áp và đến Khoa Nội Tổng Quát để được bác sĩ khám chi tiết."
+                        st.session_state.messages.append({"role": "assistant", "content": txt})
+                    except Exception as err:
+                        st.session_state.messages.append({"role": "assistant", "content": f"Bác sĩ AI ATus đã ghi nhận câu hỏi. Vui lòng gọi 024.7777.9999 để được hỗ trợ chuyên sâu."})
+                st.rerun()
+
+    with c_side:
+        # Mini Map Card
+        st.markdown("<b style='font-size:0.86rem;color:#003a70;'>Vị trí khoa gợi ý:</b>", unsafe_allow_html=True)
+        mini_map_html = get_hospital_3d_html(target_floor=3, target_dept="Khoa Nội", mode="mini")
+        components.html(mini_map_html, height=175)
+        if st.button("🔍 Xem bản đồ lớn", use_container_width=True, key="btn_view_map_ai_side"):
+            st.session_state.active_menu = "Bản đồ 3D"
+            st.session_state.target_floor = 3
+            st.session_state.target_dept = "Khoa Nội"
+            st.rerun()
+
+        # Thẻ Hướng Dẫn & Lưu Ý Trước Khi Khám (Không lặp form đặt lịch)
+        st.markdown("""
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:12px;">
+            <b style="font-size:0.88rem;color:#003a70;display:block;margin-bottom:6px;">📋 Lưu ý chuẩn bị trước khi khám</b>
+            <ul style="font-size:0.8rem;color:#475569;margin:0;padding-left:16px;line-height:1.55;">
+                <li>Mang theo CCCD gắn chip hoặc thẻ BHYT để tích hợp hồ sơ.</li>
+                <li>Nhịn ăn sáng nếu bác sĩ chỉ định xét nghiệm sinh hóa máu hoặc nội soi tiêu hóa.</li>
+                <li>Đến trước giờ hẹn 10 - 15 phút để lấy số ưu tiên tại Kiosk.</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Popup "ĐẶT LỊCH NHANH THEO KHUYẾN NGHỊ AI" (Khớp chính xác mockup 3)
+        st.markdown("""
+        <div class="floating-ai-box" style="margin-top:12px;">
+            <div class="floating-ai-header">
+                <span>GỢI Ý KHOA KHÁM TỪ BÁC SĨ AI</span>
+            </div>
+            <div class="floating-ai-body">
+                <div style="font-weight:700;color:#008f88;font-size:0.82rem;margin-bottom:4px;">Chuyên khoa gợi ý: Khoa Nội tổng quát</div>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                    <div class="doc-avatar">👨‍⚕️</div>
+                    <div>
+                        <b style="font-size:0.84rem;color:#0f172a;">BS. Nguyễn Tấn</b><br>
+                        <span style="font-size:0.75rem;color:#64748b;">Trưởng Khoa Nội tổng quát</span><br>
+                        <span style="font-size:0.75rem;color:#eab308;">⭐⭐⭐⭐⭐ 5.0</span>
+                    </div>
+                </div>
+                <div style="font-size:0.78rem;color:#64748b;margin-bottom:4px;">Khung giờ trống sớm nhất: <b>08:00 - 09:00 - 10:00</b></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("👉 Đặt Lịch Hẹn Tại Khoa Này", use_container_width=True, type="primary", key="btn_confirm_ai_rec"):
+            st.session_state.active_menu = "Đặt lịch hẹn"
+            st.session_state.selected_booking_dept = "Khoa Nội"
+            st.session_state.selected_booking_doc = "BS. Nguyễn Tấn"
+            st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TRANG 4: LỊCH SỬ KHÁM BỆNH (CHÍNH XÁC MOCKUP 2)
+# ═══════════════════════════════════════════════════════════════════════════
+elif st.session_state.active_menu == "Lịch sử khám":
+    st.markdown("""
+    <div class="page-title-row">
+        <div>
+            <h2 class="page-title-text">LỊCH SỬ KHÁM BỆNH</h2>
+            <div class="page-subtitle-text">Bệnh nhân: <b>Nguyễn Văn A</b> - Mã BN: <b>BN123456</b></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c_hist, c_side = st.columns([68, 32], gap="medium")
+
+    with c_hist:
+        c_filter, c_cards = st.columns([30, 70], gap="small")
+
+        with c_filter:
+            st.markdown("""
+            <div class="white-card">
+                <b style="font-size:0.88rem;color:#003a70;display:block;margin-bottom:8px;">Thời gian</b>
+                <div style="background:#008f88;color:#fff;padding:6px 12px;border-radius:20px;font-size:0.8rem;font-weight:700;display:inline-block;margin-bottom:6px;">Tất cả</div><br>
+                <div style="color:#64748b;font-size:0.8rem;padding:4px 0;">3 tháng gần nhất</div>
+                <div style="color:#64748b;font-size:0.8rem;padding:4px 0;">1 năm gần đây</div>
+                <hr style="margin:10px 0;border:0;border-top:1px solid #f1f5f9;">
+                <b style="font-size:0.88rem;color:#003a70;display:block;margin-bottom:8px;">Trạng thái</b>
+                <div style="font-size:0.82rem;color:#0f172a;margin-bottom:4px;">🟢 <b>Đã khám</b></div>
+                <div style="font-size:0.82rem;color:#64748b;margin-bottom:4px;">⚪ Chờ khám</div>
+                <div style="font-size:0.82rem;color:#64748b;">⚪ Đã hủy</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with c_cards:
+            # Header Lượt khám 1
+            st.markdown("""
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <b style="color:#003a70;font-size:0.9rem;">Lượt khám 1 (Gần nhất)</b>
+                <span style="font-size:0.8rem;color:#008f88;cursor:pointer;font-weight:600;">📍 Đường đi từ cổng</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Thẻ 1: Khám Nội tổng quát
+            st.markdown("""
+            <div class="history-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <b style="font-size:0.95rem;color:#0f172a;">Khám Nội tổng quát</b>
+                    <span style="font-size:0.8rem;color:#64748b;">Ngày 10/11/2026</span>
+                </div>
+                <div style="font-size:0.82rem;color:#64748b;margin:4px 0;">Bác sĩ: <b>PGS.TS. Nguyễn Văn A</b></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <span style="font-size:0.8rem;color:#64748b;">Mã hồ sơ: <b>50123450</b></span>
+                    <span class="badge-status-done">Đã hoàn thành</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                st.button("Xem kết luận & Đơn thuốc", use_container_width=True, type="primary", key="btn_h1_pres")
+            with col_b2:
+                st.button("Xem hóa đơn", use_container_width=True, key="btn_h1_bill")
+            with col_b3:
+                st.button("Đặt lại lịch", use_container_width=True, key="btn_h1_rebook")
+
+            st.write("")
+            # Thẻ 2: Khám Tai Mũi Họng
+            st.markdown("""
+            <div class="history-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <b style="font-size:0.95rem;color:#0f172a;">Khám Tai Mũi Họng</b>
+                    <span style="font-size:0.8rem;color:#64748b;">Ngày 25/10/2026</span>
+                </div>
+                <div style="font-size:0.82rem;color:#64748b;margin:4px 0;">Bác sĩ: <b>BSCKI. Lê Thị B</b></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <span style="font-size:0.8rem;color:#64748b;">Chẩn đoán: <b>Viêm họng cấp (Số 50 006)</b></span>
+                    <span class="badge-status-done">Đã hoàn thành</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            col_b2_1, col_b2_2 = st.columns(2)
+            with col_b2_1:
+                st.button("Xem bệnh án", use_container_width=True, key="btn_h2_rec")
+            with col_b2_2:
+                st.button("Đơn thuốc", use_container_width=True, key="btn_h2_pres")
+
+            st.write("")
+            # Thẻ 3: Xét nghiệm máu & Siêu âm
+            st.markdown("""
+            <div class="history-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <b style="font-size:0.95rem;color:#0f172a;">Xét nghiệm máu & Siêu âm</b>
+                    <span style="font-size:0.8rem;color:#64748b;">Ngày 12/09/2026</span>
+                </div>
+                <div style="font-size:0.82rem;color:#64748b;margin:4px 0;">Bác sĩ: <b>BSCKII. Trần C</b></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <span style="font-size:0.8rem;color:#64748b;">Kết luận: <b>Rối loạn tiêu hóa</b></span>
+                    <span class="badge-status-done">Đã hoàn thành</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.button("📄 Tải kết quả (PDF)", use_container_width=True, key="btn_h3_pdf")
+
+    with c_side:
+        # Mini 3D Map
+        st.markdown("<b style='font-size:0.86rem;color:#003a70;'>Phòng khám Nội số 3, Tầng 1:</b>", unsafe_allow_html=True)
+        mini_map_html = get_hospital_3d_html(target_floor=1, target_dept="Phòng khám Nội số 3", mode="mini")
+        components.html(mini_map_html, height=175)
+        if st.button("🔍 Xem bản đồ lớn", use_container_width=True, key="btn_view_map_from_hist"):
+            st.session_state.active_menu = "Bản đồ 3D"
+            st.session_state.target_floor = 1
+            st.session_state.target_dept = "Phòng khám Nội số 3"
+            st.rerun()
+
+        # Thẻ "Lượt khám sắp tới" (chuẩn mockup 2)
+        st.markdown("""
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-top:10px;">
+            <b style="font-size:0.88rem;color:#003a70;display:block;margin-bottom:6px;">Lượt khám sắp tới:</b>
+            <div style="font-size:0.92rem;font-weight:700;color:#0f172a;">Khám Răng Hàm Mặt</div>
+            <div style="font-size:0.8rem;color:#64748b;margin-bottom:12px;">⏰ 09:00 ngày 15/11/2026 (Phòng 303, Tầng 3)</div>
+        """, unsafe_allow_html=True)
+        if st.button("🧭 Xem hướng dẫn di chuyển", use_container_width=True, type="primary"):
+            st.session_state.active_menu = "Bản đồ 3D"
+            st.session_state.target_floor = 3
+            st.session_state.target_dept = "Khoa Tai Mũi Họng & Mắt"
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TRANG 5: TRANG CHỦ & CÀI ĐẶT
+# ═══════════════════════════════════════════════════════════════════════════
+elif st.session_state.active_menu == "Trang chủ":
     st.markdown("""
     <div style="background:linear-gradient(135deg, #003a70 0%, #008f88 100%);color:white;padding:24px 28px;border-radius:14px;margin-bottom:20px;">
         <h2 style="margin:0 0 8px 0;color:white;font-weight:800;">Chào mừng quý khách đến với BỆNH VIỆN ATUS</h2>
@@ -315,49 +1149,49 @@ if st.session_state.active_menu == "Trang chủ":
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown("""
-        <div class="home-stat-card">
+        <div class="white-card">
             <div style="font-size:28px;">🗺️</div>
             <div style="font-weight:700;font-size:1.05rem;color:#003a70;margin-top:6px;">Bản đồ 3D Tầng</div>
             <p style="font-size:0.82rem;color:#64748b;margin:4px 0 12px 0;">Mặt bằng Isometric trực quan, tìm kiếm phòng khám dễ dàng.</p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("👉 Xem Bản Đồ 3D", use_container_width=True, key="btn_go_map"):
+        if st.button("👉 Xem Bản Đồ 3D", use_container_width=True, key="home_btn_map"):
             st.session_state.active_menu = "Bản đồ 3D"
             st.rerun()
 
     with c2:
         st.markdown("""
-        <div class="home-stat-card">
+        <div class="white-card">
             <div style="font-size:28px;">📅</div>
             <div style="font-weight:700;font-size:1.05rem;color:#003a70;margin-top:6px;">Đặt Lịch & Cấp Số</div>
             <p style="font-size:0.82rem;color:#64748b;margin:4px 0 12px 0;">Lấy số thứ tự trực tiếp, gửi SMS xác nhận tức thì.</p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("👉 Đặt Lịch Ngay", use_container_width=True, key="btn_go_book"):
+        if st.button("👉 Đặt Lịch Ngay", use_container_width=True, key="home_btn_book"):
             st.session_state.active_menu = "Đặt lịch hẹn"
             st.rerun()
 
     with c3:
         st.markdown("""
-        <div class="home-stat-card">
+        <div class="white-card">
             <div style="font-size:28px;">🤖</div>
             <div style="font-weight:700;font-size:1.05rem;color:#003a70;margin-top:6px;">Bác Sĩ AI Tiếp Đón</div>
             <p style="font-size:0.82rem;color:#64748b;margin:4px 0 12px 0;">Hỏi đáp triệu chứng, quy trình BHYT và định vị phòng.</p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("👉 Chat Với Bác Sĩ AI", use_container_width=True, key="btn_go_ai"):
-            st.session_state.chat_open = True
+        if st.button("👉 Chat Với Bác Sĩ AI", use_container_width=True, key="home_btn_ai"):
+            st.session_state.active_menu = "Tư vấn AI"
             st.rerun()
 
     with c4:
         st.markdown("""
-        <div class="home-stat-card">
+        <div class="white-card">
             <div style="font-size:28px;">🕒</div>
             <div style="font-weight:700;font-size:1.05rem;color:#003a70;margin-top:6px;">Tra Cứu Lịch Sử</div>
             <p style="font-size:0.82rem;color:#64748b;margin:4px 0 12px 0;">Xem mã phiếu, thời gian chờ và tiến độ khám tại các phòng.</p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("👉 Tra Cứu Lịch Sử", use_container_width=True, key="btn_go_history"):
+        if st.button("👉 Tra Cứu Lịch Sử", use_container_width=True, key="home_btn_hist"):
             st.session_state.active_menu = "Lịch sử khám"
             st.rerun()
 
@@ -385,59 +1219,12 @@ if st.session_state.active_menu == "Trang chủ":
         </div>
         """, unsafe_allow_html=True)
 
-# 2. MENU: LỊCH SỬ KHÁM ──────────────────────────────────────────────────────
-elif st.session_state.active_menu == "Lịch sử khám":
-    st.markdown("""
-    <div class="map-header">
-        <div class="map-title">🕒 LỊCH SỬ ĐĂNG KÝ & LẤY SỐ KHÁM TẠI BỆNH VIỆN ATUS</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Tìm kiếm theo số điện thoại hoặc mã vé
-    c_find1, c_find2 = st.columns([7, 3])
-    with c_find1:
-        search_query = st.text_input("🔍 Tra cứu theo Số điện thoại hoặc Mã số phiếu (VD: 0912... hoặc AT-...)", "")
-    
-    try:
-        conn = db.get_db_connection()
-        cursor = conn.cursor()
-        if search_query.strip():
-            cursor.execute("""
-                SELECT TOP 50 t.ticket_number, t.patient_name, t.patient_phone, r.name as room_name, 
-                       r.room_number, r.floor, t.status, t.visit_date, t.created_at
-                FROM tickets t
-                JOIN rooms r ON t.initial_room_id = r.id
-                WHERE t.patient_phone LIKE ? OR t.ticket_number LIKE ?
-                ORDER BY t.id DESC
-            """, (f"%{search_query.strip()}%", f"%{search_query.strip()}%"))
-        else:
-            cursor.execute("""
-                SELECT TOP 50 t.ticket_number, t.patient_name, t.patient_phone, r.name as room_name, 
-                       r.room_number, r.floor, t.status, t.visit_date, t.created_at
-                FROM tickets t
-                JOIN rooms r ON t.initial_room_id = r.id
-                ORDER BY t.id DESC
-            """)
-        cols = [column[0] for column in cursor.description]
-        rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
-        conn.close()
-
-        if rows:
-            df = pd.DataFrame(rows)
-            df.columns = ["Mã Số Vé", "Họ Tên", "Số ĐT", "Phòng Khám", "Số Phòng", "Tầng", "Trạng Thái", "Ngày Khám", "Thời Gian Đăng Ký"]
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.info("Chưa tìm thấy lượt đăng ký nào phù hợp.")
-    except Exception as e:
-        st.warning(f"Không thể kết nối SQL Server ({e}). Đang hiển thị bộ nhớ phiên.")
-        if st.session_state.last_ticket:
-            st.write(st.session_state.last_ticket)
-
-# 3. MENU: CÀI ĐẶT ──────────────────────────────────────────────────────────
 elif st.session_state.active_menu == "Cài đặt":
     st.markdown("""
-    <div class="map-header">
-        <div class="map-title">⚙️ CÀI ĐẶT HỆ THỐNG KIOSK BỆNH VIỆN ATUS</div>
+    <div class="page-title-row">
+        <div>
+            <h2 class="page-title-text">⚙️ CÀI ĐẶT HỆ THỐNG KIOSK BỆNH VIỆN ATUS</h2>
+        </div>
     </div>
     """, unsafe_allow_html=True)
     c1, c2 = st.columns(2)
@@ -449,257 +1236,93 @@ elif st.session_state.active_menu == "Cài đặt":
         st.checkbox("Tự động phát âm thanh khi có phản hồi AI", value=True)
         st.checkbox("Tự động gửi tin nhắn SMS xác nhận lịch hẹn", value=True)
         st.checkbox("Hiển thị vị trí phòng trên bản đồ 3D khi chọn chuyên khoa", value=True)
-        st.info("Trạng thái cơ sở dữ liệu: **Microsoft SQL Server `hospital_atus` (Kết nối thành công)**")
-
-# 4. MENU: BẢN ĐỒ 3D, ĐẶT LỊCH HẸN HOẶC TƯ VẤN AI ─────────────────────────────
-else:
-    col_map, col_right = st.columns([67, 33], gap="medium")
-
-    # ── CỘT TRÁI: BẢN ĐỒ BỆNH VIỆN 3D ISOMETRIC ──────────────────────────────
-    with col_map:
-        st.markdown("""
-        <div class="map-header">
-            <div class="map-title">BẢN ĐỒ BỆNH VIỆN ATUS 3D</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.session_state.current_guidance:
-            g = st.session_state.current_guidance
-            st.info(f"📍 **Chỉ dẫn AI:** {g.get('room_name')} (Tầng {g.get('floor')}) — {g.get('instructions')}")
-
-        # Nhúng Three.js Isometric 3D Model
-        html_3d = get_hospital_3d_html(
-            target_floor=st.session_state.target_floor,
-            target_dept=st.session_state.target_dept
-        )
-        components.html(html_3d, height=625)
-
-    # ── CỘT PHẢI: FORM ĐẶT LỊCH KHÁM NHANH ──────────────────────────────────
-    with col_right:
-        st.markdown("""
-        <div class="booking-title-bar">
-            <span>Đặt Lịch Khám Nhanh - Bệnh Viện ATus</span>
-            <span style="font-size:0.8rem;background:rgba(255,255,255,0.25);padding:2px 8px;border-radius:12px;">Kiosk Quầy</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.session_state.last_ticket:
-            t = st.session_state.last_ticket
-            st.success(f"""
-            ✅ **CẤP SỐ THÀNH CÔNG!**
-            - **Mã vé:** `{t['ticket_number']}`
-            - **Phòng khám:** {t['room_name']} ({t['room_number']} - Tầng {t['floor']})
-            - **Bệnh nhân:** {t['patient_name']}
-            - **Chờ trước bạn:** {t['waiting_ahead']} người
-            """)
-            if st.button("🔄 Lấy Phiếu Mới / Nhập Lại", use_container_width=True):
-                st.session_state.last_ticket = None
-                st.rerun()
-
-        # Form đặt lịch & lấy số
-        with st.form("quick_booking_form"):
-            dept_options = [r["name"] for r in clinic_rooms]
-            default_d_idx = 0
-            if st.session_state.target_dept:
-                for idx, dname in enumerate(dept_options):
-                    if st.session_state.target_dept.lower() in dname.lower():
-                        default_d_idx = idx
-                        break
-
-            sel_dept = st.selectbox("Chọn chuyên khoa khám *", options=dept_options, index=default_d_idx)
-
-            st.write("<span style='font-size:0.85rem;font-weight:600;color:#334155;'>Chọn bác sĩ tiếp nhận</span>", unsafe_allow_html=True)
-            doc_choice = st.radio(
-                "Bác sĩ",
-                options=["BS. Nguyễn Tấn ⭐⭐⭐⭐⭐", "BS. Ngayh Huyền ⭐⭐⭐⭐⭐"],
-                label_visibility="collapsed"
-            )
-
-            st.write("<span style='font-size:0.85rem;font-weight:600;color:#334155;'>Chọn khung giờ khám</span>", unsafe_allow_html=True)
-            time_slots = ["20:00", "09:00", "03:00", "04:00", "10:00", "12:00", "15:00", "17:00"]
-            sel_time = st.selectbox("Giờ hẹn", options=time_slots, label_visibility="collapsed")
-
-            p_name = st.text_input("Họ và tên bệnh nhân *", placeholder="Ví dụ: Nguyễn Văn A")
-            p_phone = st.text_input("Số điện thoại (nhận SMS xác nhận)", placeholder="0912 345 678")
-
-            btn_confirm = st.form_submit_button("Xác nhận đặt lịch & Lấy số thứ tự", use_container_width=True, type="primary")
-
-            if btn_confirm:
-                if not p_name.strip():
-                    st.error("Vui lòng điền Họ tên bệnh nhân!")
-                else:
-                    target_room = clinic_rooms[0]
-                    for r in clinic_rooms:
-                        if r["name"] == sel_dept:
-                            target_room = r
-                            break
-
-                    try:
-                        ticket_res = queue_service.issue_ticket(
-                            room_id=target_room["id"],
-                            patient_name=p_name.strip(),
-                            patient_phone=p_phone.strip(),
-                            patient_notes=f"Hẹn giờ {sel_time} - {doc_choice}"
-                        )
-                        st.session_state.last_ticket = ticket_res
-                        st.session_state.target_floor = ticket_res["floor"]
-                        st.session_state.target_dept = ticket_res["room_name"]
-
-                        if p_phone.strip():
-                            send_appointment_sms(
-                                code=ticket_res["ticket_number"],
-                                name=ticket_res["patient_name"],
-                                phone=ticket_res["patient_phone"],
-                                dept=f"{ticket_res['room_name']} ({ticket_res['room_number']})",
-                                date=str(date.today())
-                            )
-                    except Exception as e:
-                        st.error(f"Lỗi cấp vé: {e}")
-                    st.rerun()
+        st.info("Trạng thái cơ sở dữ liệu: **Microsoft SQL Server `hospital_atus` (Đã đồng bộ)**")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CỬA SỔ CHAT AI FLOATING WIDGET (HÌNH TRÒN NỔI <-> POPUP CHAT)
+# FLOATING AI ASSISTANT POPUP (FAB WIDGET NỔI GÓC PHẢI DƯỚI TOÀN HỆ THỐNG)
 # ═══════════════════════════════════════════════════════════════════════════
-
-# NẾU CHAT ĐANG ĐÓNG -> HIỂN THỊ NÚT TRÒN NỔI BẬT GÓC PHẢI DƯỚI
-if not st.session_state.chat_open:
-    st.markdown("""
-    <div style="position:fixed;bottom:24px;right:28px;z-index:999999;">
-    """, unsafe_allow_html=True)
-    
-    col_fab_l, col_fab_r = st.columns([8, 2])
-    with col_fab_r:
-        if st.button("💬 Trò Chuyện Bác Sĩ AI", type="primary", use_container_width=True, help="Bấm để mở trợ lý tiếp đón AI"):
-            st.session_state.chat_open = True
-            st.rerun()
-
-# NẾU CHAT ĐANG MỞ -> HIỂN THỊ HỘP POPUP CHUẨN DESIGN MOCKUP
-else:
-    st.write("---")
-    chat_cols = st.columns([65, 35])
-    with chat_cols[1]:
+# Thiết kế dạng Popover nổi (Fixed FAB) - KHÔNG chiếm diện tích cột layout hay mô hình 3D!
+with st.container():
+    with st.popover("💬 🤖 AI Assistant (Tư vấn 24/7)", help="Bác sĩ AI hỗ trợ chỉ đường, hướng dẫn BHYT và giải đáp sức khỏe"):
         st.markdown("""
-        <div class="ai-chat-header">
-            <div style="display:flex;align-items:center;gap:6px;">
-                🤖 <span>AI Assistant - Bệnh Viện ATus</span>
+        <div style="border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:#008f88;color:white;display:flex;align-items:center;justify-content:center;font-size:20px;">🤖</div>
+            <div>
+                <b style="color:#003a70;font-size:0.95rem;display:block;">Bác Sĩ Trí Tuệ Nhân Tạo ATUS</b>
+                <span style="font-size:0.75rem;color:#059669;font-weight:600;">● Trực tuyến 24/7 · Sẵn sàng hỗ trợ</span>
             </div>
-            <span style="font-size:0.75rem;background:rgba(255,255,255,0.2);padding:2px 6px;border-radius:4px;">Tiếp đón & Triage</span>
         </div>
         """, unsafe_allow_html=True)
 
-        c_bar1, c_bar2 = st.columns([1, 1])
-        with c_bar1:
-            if st.button("➖ Thu nhỏ thành nút tròn", use_container_width=True):
-                st.session_state.chat_open = False
-                st.rerun()
-        with c_bar2:
-            if st.button("🗑️ Xóa lịch sử chat", use_container_width=True):
-                st.session_state.messages = []
-                st.session_state.target_dept = ""
-                st.session_state.current_guidance = None
-                st.rerun()
-
-        # Các gợi ý câu hỏi nhanh (Chips)
-        st.write("<span style='font-size:0.78rem;color:#64748b;font-weight:600;'>Gợi ý câu hỏi nhanh:</span>", unsafe_allow_html=True)
-        chip_c1, chip_c2 = st.columns(2)
-        with chip_c1:
-            if st.button("🩺 Khám nội tổng quát", use_container_width=True, key="chip1"):
-                st.session_state.quick_chat_prompt = "Tôi muốn khám nội tổng quát"
-        with chip_c2:
-            if st.button("📋 Thủ tục BHYT", use_container_width=True, key="chip2"):
-                st.session_state.quick_chat_prompt = "Thủ tục khám BHYT cần những gì?"
-
-        # Voice Input Component
-        components.html("""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <style>
-                body { margin: 0; font-family: sans-serif; background: transparent; }
-                .voice-btn { background: #008f88; color: white; border: none; border-radius: 14px; padding: 5px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: 0.2s; }
-                .voice-btn:hover { background: #003a70; }
-            </style>
-        </head>
-        <body>
-            <button class="voice-btn" onclick="startVoice()">🎤 Nói Triệu Chứng (Tiếng Việt)</button>
-            <span id="vTxt" style="font-size:11px;color:#64748b;margin-left:6px;">Bấm để nói bằng giọng nói...</span>
-            <script>
-                function startVoice() {
-                    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-                    if (!SpeechRec) { alert("Trình duyệt không hỗ trợ Web Speech."); return; }
-                    const r = new SpeechRec();
-                    r.lang = 'vi-VN';
-                    r.onstart = () => { document.getElementById('vTxt').innerText = 'Đang nghe bạn nói...'; };
-                    r.onresult = (e) => {
-                        const txt = e.results[0][0].transcript;
-                        document.getElementById('vTxt').innerText = 'Đã nhận: ' + txt;
-                        navigator.clipboard.writeText(txt);
-                    };
-                    r.onerror = () => { document.getElementById('vTxt').innerText = 'Không nhận diện được mic.'; };
-                    r.start();
-                }
-            </script>
-        </body>
-        </html>
-        """, height=30)
-
-        # Cửa sổ tin nhắn trò chuyện
-        chat_win = st.container(height=280)
-        with chat_win:
-            if not st.session_state.messages:
-                st.markdown("""
-                <div class="bubble-ai">
-                    🤖 <b>AI Bệnh Viện ATus:</b> Xin chào! Tôi là trợ lý AI tiếp đón của Bệnh Viện ATus. Tôi có thể giúp bạn tìm đường hoặc gợi ý chuyên khoa khám phù hợp. Bạn đang có dấu hiệu hay thắc mắc gì?
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                for m in st.session_state.messages:
+        if not st.session_state.messages:
+            st.markdown("""
+            <div style="background:#f0fdfa;border:1px solid #ccfbf1;border-radius:10px;padding:10px;font-size:0.84rem;color:#0f766e;margin-bottom:10px;">
+                👋 <b>Xin chào bạn!</b> Tôi là Trợ lý AI Bệnh Viện ATUS. Bạn đang gặp phải triệu chứng gì hay cần tìm phòng khám nào?
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            with st.container(height=260):
+                for m in st.session_state.messages[-6:]:
                     if m["role"] == "user":
-                        st.markdown(f'<div class="bubble-user">{m["content"]}</div>', unsafe_allow_html=True)
+                        st.markdown(f"""
+                        <div style="background:#008f88;color:#ffffff;border-radius:12px;padding:8px 12px;font-size:0.83rem;margin:6px 0 6px auto;max-width:85%;text-align:right;">
+                            {m["content"]}
+                        </div>
+                        """, unsafe_allow_html=True)
                     else:
-                        st.markdown(f'<div class="bubble-ai">🤖 {m["content"]}</div>', unsafe_allow_html=True)
+                        st.markdown(f"""
+                        <div style="background:#f1f5f9;color:#1e293b;border-radius:12px;padding:8px 12px;font-size:0.83rem;margin:6px auto 6px 0;max-width:85%;">
+                            <b>AI:</b> {m["content"]}
+                        </div>
+                        """, unsafe_allow_html=True)
 
-        # Xử lý prompt từ chip gợi ý (nếu có)
-        user_to_send = None
-        if "quick_chat_prompt" in st.session_state and st.session_state.quick_chat_prompt:
-            user_to_send = st.session_state.quick_chat_prompt
-            st.session_state.quick_chat_prompt = None
+        st.markdown("<span style='font-size:0.78rem;font-weight:700;color:#64748b;'>Gợi ý nhanh:</span>", unsafe_allow_html=True)
+        ch1, ch2 = st.columns(2)
+        with ch1:
+            if st.button("Đau đầu chóng mặt", key="fab_q1", use_container_width=True):
+                st.session_state.fab_input_val = "Tôi bị đau đầu, chóng mặt từ sáng nay"
+                st.rerun()
+        with ch2:
+            if st.button("Khám Nội ở phòng nào?", key="fab_q2", use_container_width=True):
+                st.session_state.fab_input_val = "Tôi muốn khám Nội thì đi phòng nào?"
+                st.rerun()
 
-        # Form gửi tin nhắn trong khung chat
-        with st.form("chat_input_form", clear_on_submit=True):
-            user_msg = st.text_input("Trò chuyện cùng AI...", placeholder="Ví dụ: Tôi muốn khám nội tổng quát, đau dạ dày...")
-            btn_send = st.form_submit_button("Gửi 🚀", use_container_width=True, type="primary")
+        with st.form("form_fab_ai_chat", clear_on_submit=True):
+            fab_txt = st.text_input("Câu hỏi của bạn:", value=st.session_state.get("fab_input_val", ""), placeholder="Nhập triệu chứng hoặc phòng khám...", label_visibility="collapsed")
+            col_s1, col_s2 = st.columns([75, 25])
+            with col_s1:
+                submit_fab = st.form_submit_button("Gửi tin 🚀", use_container_width=True, type="primary")
+            with col_s2:
+                clear_fab = st.form_submit_button("Xóa", use_container_width=True)
 
-            if (btn_send and user_msg.strip()) or user_to_send:
-                final_input = user_to_send if user_to_send else user_msg.strip()
-                st.session_state.messages.append({"role": "user", "content": final_input})
-                prior = st.session_state.messages[:-1]
+            if clear_fab:
+                st.session_state.messages = []
+                st.session_state.fab_input_val = ""
+                st.rerun()
 
-                with st.spinner("Bác sĩ AI ATus đang phân tích..."):
-                    try:
-                        reply = answer(final_input, history=prior)
-                        reply_text = reply.get("text", "")
-                        if reply.get("stream"):
-                            chunks = []
-                            for c in reply["stream"]:
-                                chunks.append(str(c))
-                            reply_text = "".join(chunks).strip()
+            if submit_fab and fab_txt.strip():
+                user_msg = fab_txt.strip()
+                st.session_state.fab_input_val = ""
+                st.session_state.messages.append({"role": "user", "content": user_msg})
 
-                        if not reply_text:
-                            reply_text = "Dạ, Bệnh Viện ATus đã tiếp nhận thông tin của bạn. Bạn có thể chọn phòng khám ở khung bên cạnh để lấy số thứ tự ngay."
+                low_msg = user_msg.lower()
+                # Triage red-flag safety check
+                if any(w in low_msg for w in ["đau ngực", "khó thở", "liệt", "ngất", "bất tỉnh", "co giật", "tai biến", "đột quỵ"]):
+                    ans = "🚨 CẢNH BÁO NGUY CƠ CẤP CỨU CAO: Vui lòng đến ngay Khoa Cấp Cứu (P.101, Tầng 1) hoặc báo nhân viên y tế gần nhất ngay lập tức!"
+                    st.session_state.target_floor = 1
+                    st.session_state.target_dept = "Khoa Cấp Cứu 24/7"
+                else:
+                    ans = answer(user_msg)
+                    if "nội" in low_msg:
+                        st.session_state.target_floor = 1
+                        st.session_state.target_dept = "Khoa Khám Bệnh Chung"
+                    elif "nhi" in low_msg:
+                        st.session_state.target_floor = 1
+                        st.session_state.target_dept = "Khoa Khám Nhi"
+                    elif "tai mũi họng" in low_msg or "mắt" in low_msg:
+                        st.session_state.target_floor = 3
+                        st.session_state.target_dept = "Khoa Tai Mũi Họng & Mắt"
 
-                        st.session_state.messages.append({"role": "assistant", "content": reply_text})
-
-                        if reply.get("location"):
-                            loc = reply["location"]
-                            st.session_state.target_floor = loc.get("floor", 1)
-                            st.session_state.target_dept = reply.get("department", "")
-                            st.session_state.current_guidance = loc
-                    except Exception as err:
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": f"Dạ, Bệnh Viện ATus đã ghi nhận triệu chứng. Nếu đây là trường hợp khẩn cấp, vui lòng đến ngay Khoa Cấp Cứu Tầng 1 hoặc gọi 115."
-                        })
+                st.session_state.messages.append({"role": "assistant", "content": ans})
                 st.rerun()
